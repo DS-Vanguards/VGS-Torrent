@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07110f">
+  <meta name="layout-token" content="{{ _lt }}">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon.png') }}">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1">
+  <title>{% block title %}VGS-Torrent{% endblock %}</title>
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  {% block body %}
+  <div class="topbar">
+    <a class="topbar-brand" href="{{ url_for('painel') if current_user.is_authenticated else url_for('login') }}">
+      <img class="brand-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="VGS-Torrent">
+      <div>
+        <div class="brand-name">VGS-Torrent</div>
+        <div class="brand-sub">Acervo da Vanguards</div>
+      </div>
+    </a>
+    {% block nav %}{% endblock %}
+    {% if current_user.is_authenticated %}
+    <div class="topbar-actions">
+      <span class="user-chip">{{ current_user.username }} · {{ current_user.role_label }}</span>
+      <form method="POST" action="{{ url_for('logout') }}" class="logout-form">
+        <button class="reset-btn" type="submit">SAIR</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <main class="page-main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-wrap">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  {% endblock %}
+
+  {% block modals %}{% endblock %}
+
+  {% include '_layout_footer.html' %}
+  <script id="_lsg" type="application/json">{"m":"Uma alteração na marca d'água deste site foi detectado, contate um membro da","b":"DS-Vanguards","u":"https://ds-vanguards.vercel.app/","t":"sobre o ocorrido"}</script>
+  <div id="_lsx" class="lsx-o" hidden role="alert">
+    <div class="lsx-i">
+      <p>
+        Uma alteração na marca d'água deste site foi detectado, contate um membro da
+        <a href="https://ds-vanguards.vercel.app/" target="_blank" rel="noopener">DS-Vanguards</a>
+        sobre o ocorrido.
+      </p>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='js/ui-core.js') }}?v={{ _lt }}" defer></script>
+  <script>
+    (function () {
+      var meta = document.querySelector('meta[name="csrf-token"]');
+      if (!meta) return;
+      document.addEventListener("submit", function (event) {
+        var form = event.target;
+        if (!form || !form.method || form.method.toUpperCase() !== "POST") return;
+        if (form.querySelector('input[name="csrf_token"]')) return;
+        var input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "csrf_token";
+        input.value = meta.content;
+        form.appendChild(input);
+      }, true);
+      if (window.fetch) {
+        var originalFetch = window.fetch;
+        window.fetch = function (input, init) {
+          init = init || {};
+          var headers = new Headers(init.headers || {});
+          if (!headers.has("X-CSRFToken")) headers.set("X-CSRFToken", meta.content);
+          if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+            headers.set("Content-Type", "application/json");
+          }
+          init.headers = headers;
+          return originalFetch.call(this, input, init);
+        };
+      }
+    })();
+  </script>
+  <div class="toast" id="toast"></div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

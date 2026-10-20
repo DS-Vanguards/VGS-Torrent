@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — VGS-Torrent{% endblock %}
+{% block content %}
+<div class="restrito-page">
+  <div class="welcome-banner">Sistema de proteção DS-Vanguards</div>
+  <div class="access-denied-panel">
+    <div class="lock-wrap" aria-hidden="true">
+      <svg class="lock-icon" viewBox="0 0 64 64" width="72" height="72">
+        <defs>
+          <linearGradient id="lockGold" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f6e27a"/>
+            <stop offset="45%" stop-color="#e4b84a"/>
+            <stop offset="100%" stop-color="#c9922b"/>
+          </linearGradient>
+        </defs>
+        <rect x="14" y="28" width="36" height="28" rx="6" fill="url(#lockGold)" stroke="#8a5a12" stroke-width="1.5"/>
+        <path d="M22 28v-8a10 10 0 0 1 20 0v8" fill="none" stroke="url(#lockGold)" stroke-width="6" stroke-linecap="round"/>
+        <circle cx="32" cy="41" r="4" fill="#7a4a10"/>
+        <rect x="30.5" y="44" width="3" height="7" rx="1.2" fill="#7a4a10"/>
+      </svg>
+    </div>
+    <h2>{{ title }}</h2>
+    {% if severe %}
+    <p>
+      O sistema de proteção DS-Vanguards detectou diversas tentativas irregulares de criação de conta, contate um
+      <a class="admin-link" href="https://ds-vanguards.vercel.app/" target="_blank" rel="noopener">Administrador</a>
+      do site
+    </p>
+    {% else %}
+    <p>
+      O sistema de proteção DS-Vanguards bloqueou seu acesso temporariamente devido atingir o limite de tentativas.
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

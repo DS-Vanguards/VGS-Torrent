@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Cadastro — VGS-Torrent{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <img class="auth-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="VGS-Torrent">
+    <div class="auth-kicker">VGS-TORRENT</div>
+    <h1>Criar conta</h1>
+    <p class="subtitle">O cadastro público aceita somente @gmail.com e entra como Visitante.</p>
+    <form method="POST" class="form">
+      <label for="username">Nome de usuário</label>
+      <input class="form-input" type="text" id="username" name="username" required minlength="3" maxlength="80" placeholder="Ex: Russi">
+      <label for="email">E-mail Gmail</label>
+      <input class="form-input" type="email" id="email" name="email" required placeholder="nome@gmail.com">
+      <label for="password">Senha</label>
+      <input class="form-input" type="password" id="password" name="password" required minlength="6">
+      <label for="confirm_password">Confirmar senha</label>
+      <input class="form-input" type="password" id="confirm_password" name="confirm_password" required minlength="6">
+      <button type="submit" class="save-btn auth-submit">CADASTRAR</button>
+    </form>
+    <p class="auth-link">Já tem conta? <a href="{{ url_for('login') }}">Entrar</a></p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Acervo — VGS-Torrent{% endblock %}
+{% block nav %}
+<button class="nav-drawer-toggle" id="nav-drawer-toggle" type="button" aria-controls="main-nav" aria-expanded="false">Abas</button>
+<nav class="nav-tabs" id="main-nav" aria-label="Abas do acervo"></nav>
+{% endblock %}
+{% block content %}
+<div id="view-library" class="view active">
+  <div class="stats-bar" id="summary-grid"></div>
+  <div class="day-header">
+    <div>
+      <span class="day-title" id="tab-label">ACERVO</span>
+      <p class="section-lead" id="section-lead"></p>
+    </div>
+    {% if can_edit %}
+    <button class="save-btn" id="btn-add-item" type="button">+ NOVO BOTÃO</button>
+    {% endif %}
+  </div>
+  <div class="card-grid" id="item-grid"></div>
+</div>
+
+{% if is_admin %}
+<div id="view-admin" class="view">
+  <div class="resumo-wrap">
+    <div class="admin-users-head">
+      <div class="section-title" style="margin:0;padding:0;border:none">Abas do acervo</div>
+      <button class="save-btn" id="btn-add-section" type="button">+ NOVA ABA</button>
+    </div>
+    <p class="admin-hint">Crie e edite as abas aqui. O acesso define quem vê a aba: Visitante vê o básico; VIP, Mega VIP e Super VIP sobem nessa ordem; VGS-Client vê o escolar; VGS-Pro Client vê o escolar e o Pro.</p>
+    <div class="table-wrap admin-table-wrap">
+      <table class="resumo-table">
+        <thead>
+          <tr>
+            <th>Aba</th>
+            <th>Acesso</th>
+            <th>Itens</th>
+            <th>Ordem</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="sections-body"></tbody>
+      </table>
+    </div>
+
+    <div class="admin-users-head" style="margin-top:28px">
+      <div class="section-title" style="margin:0;padding:0;border:none">Usuários e cargos</div>
+      <button class="save-btn" id="btn-add-user" type="button">+ ADICIONAR USUÁRIO</button>
+    </div>
+    <p class="admin-hint">O cargo que você pode atribuir depende do seu nível: <strong>Admin</strong> só altera cargos abaixo; <strong>VGS-Owner's</strong> define qualquer cargo, inclusive outro VGS-Owner's. O cadastro pelo painel aceita qualquer e-mail.</p>
+    <div class="table-wrap admin-table-wrap">
+      <table class="resumo-table">
+        <thead>
+          <tr>
+            <th>Usuário</th>
+            <th>E-mail</th>
+            <th>Cargo</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="users-body"></tbody>
+      </table>
+    </div>
+
+    <div class="section-title" style="margin-top:28px">Máquinas bloqueadas</div>
+    <p class="admin-hint">Bloqueios da proteção DS-Vanguards. Use <strong>Alterar bloqueio</strong> para definir quanto falta ou <strong>Remover bloqueio</strong> para liberar a máquina.</p>
+    <div class="table-wrap admin-table-wrap">
+      <table class="resumo-table">
+        <thead>
+          <tr>
+            <th>Token</th>
+            <th>IP</th>
+            <th>Nível</th>
+            <th>Até</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="blocks-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block modals %}
+<div class="modal-overlay" id="tutorial-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="tutorial-title">Tutorial</span>
+      <button class="modal-close-btn" type="button" data-close="tutorial-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="tutorial-body" id="tutorial-body"></p>
+      <a class="save-btn tutorial-link" id="tutorial-link" href="#" target="_blank" rel="noopener noreferrer" hidden>ABRIR LINK</a>
+    </div>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="tutorial-modal">FECHAR</button>
+    </div>
+  </div>
+</div>
+
+{% if can_edit %}
+<div class="modal-overlay" id="item-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="item-modal-title">Novo botão</span>
+      <button class="modal-close-btn" type="button" data-close="item-modal">✕</button>
+    </div>
+    <form class="modal-body" id="item-form">
+      <input type="hidden" id="item-id">
+      <label for="item-section">Aba</label>
+      <select class="form-input" id="item-section" required></select>
+      <label for="item-title">Nome do botão</label>
+      <input class="form-input" id="item-title" maxlength="120" required placeholder="Ex: Pacote do dia a dia">
+      <label for="item-kind">Tipo</label>
+      <select class="form-input" id="item-kind">
+        <option value="download">Download</option>
+        <option value="tutorial">Tutorial</option>
+      </select>
+      <label for="item-tier">Acesso do botão</label>
+      <select class="form-input" id="item-tier">
+        <option value="">Mesmo da aba</option>
+        {% for tier in TIERS %}
+        <option value="{{ tier }}">{{ TIER_LABELS.get(tier, tier) }}</option>
+        {% endfor %}
+      </select>
+      <label for="item-description">Descrição curta</label>
+      <input class="form-input" id="item-description" maxlength="400" placeholder="Aparece no cartão">
+      <label for="item-url">Link do MediaFire</label>
+      <input class="form-input" id="item-url" type="url" maxlength="500" placeholder="https://www.mediafire.com/...">
+      <div id="item-body-wrap">
+        <label for="item-body">Texto do tutorial</label>
+        <textarea class="form-input" id="item-body" maxlength="4000" placeholder="Opcional se houver link"></textarea>
+      </div>
+      <label for="item-order">Ordem</label>
+      <input class="form-input" id="item-order" type="number" min="0" max="9999" value="0">
+    </form>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="item-modal">CANCELAR</button>
+      <button class="print-btn" type="submit" form="item-form">SALVAR</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="section-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="section-modal-title">Nova aba</span>
+      <button class="modal-close-btn" type="button" data-close="section-modal">✕</button>
+    </div>
+    <form class="modal-body" id="section-form">
+      <input type="hidden" id="section-id">
+      <label for="section-title">Nome da aba</label>
+      <input class="form-input" id="section-title" maxlength="80" required>
+      <label for="section-icon">Ícone</label>
+      <input class="form-input" id="section-icon" maxlength="8" value="💾">
+      <label for="section-tier">Quem pode ver</label>
+      <select class="form-input" id="section-tier">
+        {% for tier in TIERS %}
+        <option value="{{ tier }}">{{ TIER_LABELS.get(tier, tier) }}</option>
+        {% endfor %}
+      </select>
+      <label for="section-description">Descrição</label>
+      <textarea class="form-input" id="section-description" maxlength="400"></textarea>
+      <label for="section-order">Ordem</label>
+      <input class="form-input" id="section-order" type="number" min="0" max="9999" value="0">
+    </form>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="section-modal">CANCELAR</button>
+      <button class="print-btn" type="submit" form="section-form">SALVAR</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if is_admin %}
+<div class="modal-overlay" id="user-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Adicionar usuário</span>
+      <button class="modal-close-btn" type="button" data-close="user-modal">✕</button>
+    </div>
+    <form class="modal-body" id="user-form">
+      <label for="u-username">Nome de usuário</label>
+      <input class="form-input" type="text" id="u-username" required minlength="3" maxlength="80" placeholder="Ex: Matheus">
+      <label for="u-email">E-mail</label>
+      <input class="form-input" type="email" id="u-email" required maxlength="120" placeholder="qualquer@email.com">
+      <p class="admin-hint">Este cadastro aceita qualquer e-mail. O cadastro público continua só com @gmail.com.</p>
+      <label for="u-password">Senha</label>
+      <input class="form-input" type="password" id="u-password" required minlength="6">
+      <label for="u-confirm">Confirmar senha</label>
+      <input class="form-input" type="password" id="u-confirm" required minlength="6">
+      <label for="u-role">Cargo</label>
+      <select class="form-input" id="u-role">
+        {% for role in ASSIGNABLE_ROLES %}
+        <option value="{{ role }}" {% if role == "visitante" %}selected{% endif %}>{{ ROLE_LABELS.get(role, role) }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="user-modal">CANCELAR</button>
+      <button class="print-btn" type="submit" form="user-form">CADASTRAR</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="role-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Atribuir cargo</span>
+      <button class="modal-close-btn" type="button" data-close="role-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="admin-hint" id="role-user-label"></p>
+      <div class="role-options" id="role-options"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="role-modal">CANCELAR</button>
+      <button class="print-btn" type="button" id="role-modal-save">SALVAR</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="block-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Alterar bloqueio</span>
+      <button class="modal-close-btn" type="button" data-close="block-modal">✕</button>
+    </div>
+    <form class="modal-body" id="block-form">
+      <input type="hidden" id="block-id">
+      <label for="block-amount">Número</label>
+      <input class="form-input" type="number" id="block-amount" min="1" max="999" step="1" required placeholder="Ex: 2">
+      <label for="block-unit">Unidade</label>
+      <select class="form-input" id="block-unit" required>
+        <option value="horas">Horas</option>
+        <option value="dias">Dias</option>
+        <option value="semanas">Semanas</option>
+        <option value="meses">Meses</option>
+        <option value="anos">Anos</option>
+      </select>
+    </form>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="block-modal">CANCELAR</button>
+      <button class="print-btn" type="submit" form="block-form">SALVAR</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  window.VGS = {
+    canEdit: {{ can_edit | tojson }},
+    isAdmin: {{ is_admin | tojson }},
+    isVgsOwner: {{ is_vgs_owner | tojson }},
+    userId: {{ user_id | tojson }},
+    username: {{ username | tojson }},
+    roles: {{ ASSIGNABLE_ROLES | tojson }},
+    roleLabels: {{ ROLE_LABELS | tojson }},
+    tiers: {{ TIERS | tojson }},
+    tierLabels: {{ TIER_LABELS | tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=1" defer></script>
+{% endblock %}
