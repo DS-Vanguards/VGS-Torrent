@@ -59,16 +59,9 @@ def _sqlite_fast_pragmas(dbapi_connection, _connection_record):
     cursor.close()
 
 
-def _should_migrate_schema() -> bool:
-    if os.environ.get("RUN_DB_MIGRATE", "").lower() in ("1", "true", "yes"):
-        return True
-    return not os.environ.get("VERCEL")
-
-
 with app.app_context():
-    if _should_migrate_schema():
-        db.create_all()
-        ensure_schema()
+    db.create_all()
+    ensure_schema()
     init_default_data()
 
 
@@ -268,7 +261,8 @@ def login():
         identifier = request.form.get("identifier", "").strip()
         password = request.form.get("password", "")
         user = User.query.filter(
-            (User.username == identifier) | (func.lower(User.email) == identifier.lower())
+            (func.lower(User.username) == identifier.lower())
+            | (func.lower(User.email) == identifier.lower())
         ).first()
 
         if not user:
