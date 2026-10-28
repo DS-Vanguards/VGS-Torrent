@@ -44,16 +44,23 @@
     <p class="admin-hint">Marque as abas de cada cargo. <strong>Admin</strong> e <strong>VGS-Owner's</strong> ficam de fora e mantêm o acesso total. Uma aba nova só aparece para os cargos marcados.</p>
     <div id="access-panel"></div>
 
-    <div class="section-title" style="margin-top:28px">Botão expansível</div>
-    <p class="admin-hint">Este botão fica na lateral, abaixo da logo, e abre as abas marcadas. As que ficarem desmarcadas continuam soltas na lista. Se nenhuma estiver marcada, o botão não aparece.</p>
-    <form id="folder-form" class="folder-form">
-      <label for="folder-title">Nome do botão</label>
-      <input class="form-input" id="folder-title" maxlength="40" placeholder="Ex: Postgres database">
-      <label for="folder-icon">Ícone</label>
-      <input class="form-input" id="folder-icon" maxlength="8" placeholder="🗄️">
-      <div class="access-grid" id="folder-checks"></div>
-      <button class="save-btn" type="submit">SALVAR BOTÃO</button>
-    </form>
+    <div class="admin-users-head" style="margin-top:28px">
+      <div class="section-title" style="margin:0;padding:0;border:none">Divisões da lateral</div>
+      <button class="save-btn" id="btn-add-divider" type="button">+ NOVA DIVISÃO</button>
+    </div>
+    <p class="admin-hint">Uma divisão é um título que separa as abas. A <strong>ordem</strong> é a mesma das abas: uma divisão com ordem 15 fica entre a aba 10 e a aba 20, e não fica presa no fim da lista.</p>
+    <div class="table-wrap admin-table-wrap">
+      <table class="resumo-table">
+        <thead>
+          <tr>
+            <th>Divisão</th>
+            <th>Ordem</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="dividers-body"></tbody>
+      </table>
+    </div>
 
     <div class="admin-users-head" style="margin-top:28px">
       <div class="section-title" style="margin:0;padding:0;border:none">Usuários e cargos</div>
@@ -78,7 +85,7 @@
       <div class="section-title" style="margin:0;padding:0;border:none">Máquinas bloqueadas</div>
       <button class="save-btn" id="btn-add-block" type="button">+ BLOQUEAR MÁQUINA</button>
     </div>
-    <p class="admin-hint">Bloqueios da proteção DS-Vanguards. O bloqueio manual cobre o site com a tela de acesso negado. Use <strong>Alterar bloqueio</strong> para definir quanto falta ou <strong>Remover bloqueio</strong> para liberar a máquina.</p>
+    <p class="admin-hint">O bloqueio manual usa o IP que <strong>este site</strong> recebe. Nesta visita esse IP é <strong id="seen-ip">{{ seen_ip or "—" }}</strong>. No mesmo computador, bloqueie esse valor (aqui costuma ser 127.0.0.1), não o IP público da internet. Em outra máquina, use o IP que aparece para ela ao abrir este site.</p>
     <div class="table-wrap admin-table-wrap">
       <table class="resumo-table">
         <thead>
@@ -110,6 +117,20 @@
     </div>
     <div class="modal-footer">
       <button class="close-footer-btn" type="button" data-close="tutorial-modal">FECHAR</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="tier-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Acesso negado</span>
+      <button class="modal-close-btn" type="button" data-close="tier-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="tier-lock-text" id="tier-modal-text">Você não possui acesso VIP</p>
+    </div>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="tier-modal">FECHAR</button>
     </div>
   </div>
 </div>
@@ -182,6 +203,25 @@
     <div class="modal-footer">
       <button class="close-footer-btn" type="button" data-close="section-modal">CANCELAR</button>
       <button class="print-btn" type="submit" form="section-form">SALVAR</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="divider-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="divider-modal-title">Nova divisão</span>
+      <button class="modal-close-btn" type="button" data-close="divider-modal">✕</button>
+    </div>
+    <form class="modal-body" id="divider-form">
+      <input type="hidden" id="divider-id">
+      <label for="divider-title">Nome</label>
+      <input class="form-input" id="divider-title" maxlength="40" required placeholder="Ex: Downloads">
+      <label for="divider-order">Ordem</label>
+      <input class="form-input" id="divider-order" type="number" min="0" max="9999" value="15">
+    </form>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="divider-modal">CANCELAR</button>
+      <button class="print-btn" type="submit" form="divider-form">SALVAR</button>
     </div>
   </div>
 </div>
@@ -303,8 +343,10 @@
     roles: {{ ASSIGNABLE_ROLES | tojson }},
     roleLabels: {{ ROLE_LABELS | tojson }},
     tiers: {{ TIERS | tojson }},
-    tierLabels: {{ TIER_LABELS | tojson }}
+    tierLabels: {{ TIER_LABELS | tojson }},
+    allowedTiers: {{ allowed_tiers | tojson }},
+    seenIp: {{ seen_ip | tojson }}
   };
 </script>
-<script src="{{ url_for('static', filename='js/app.js') }}?v=3" defer></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=5" defer></script>
 {% endblock %}

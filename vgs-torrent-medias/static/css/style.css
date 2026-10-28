@@ -174,41 +174,50 @@ html.side-mini .collapse-icon { transform: scaleX(-1); }
 }
 .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-icon { width: 1.4em; text-align: center; flex-shrink: 0; }
-.nav-folder-items { display: none; }
-.nav-folder.is-open .nav-folder-items { display: flex; flex-direction: column; }
-.nav-folder-items .nav-tab { padding-left: 28px; }
-.nav-folder-btn { position: relative; }
-.folder-chevron {
-  margin-left: auto;
-  font-size: 11px;
-  transition: transform .15s ease;
+.nav-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 14px 4px;
+  color: var(--text3);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
-.nav-folder:not(.is-open) .folder-chevron { transform: rotate(-90deg); }
-.nav-folder-btn.has-active { color: var(--text); }
+.nav-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border2);
+}
+html.side-mini .nav-divider {
+  margin: 8px 14px;
+  min-height: 1px;
+}
+html.side-mini .nav-divider-label,
+html.side-mini .nav-divider::after { display: none; }
+html.side-mini .nav-divider { border-top: 1px solid var(--border2); }
 
 html.side-mini .brand-copy,
 html.side-mini .nav-label,
-html.side-mini .collapse-label,
-html.side-mini .folder-chevron { display: none; }
+html.side-mini .collapse-label { display: none; }
 html.side-mini .sidebar-brand,
 html.side-mini .sidebar-collapse,
-html.side-mini .nav-tab,
-html.side-mini .nav-folder-btn {
+html.side-mini .nav-tab {
   justify-content: center;
   padding-left: 0;
   padding-right: 0;
 }
-html.side-mini .nav-tab,
-html.side-mini .nav-folder-btn {
+html.side-mini .nav-tab {
   width: 42px;
   min-height: 42px;
   margin: 3px auto;
   border-radius: 8px;
   border-left-color: transparent;
 }
-html.side-mini .nav-folder-items .nav-tab { padding-left: 0; }
-html.side-mini .nav-tab.active,
-html.side-mini .nav-folder-btn.has-active {
+html.side-mini .nav-tab.active {
   background: var(--surface3);
   color: var(--aqua);
   box-shadow: inset 0 0 0 1px var(--border2);
@@ -298,6 +307,7 @@ html.side-mini .nav-folder-btn.has-active {
   text-decoration: none;
 }
 .save-btn:hover, .print-btn:hover { background: rgba(127, 255, 212, .24); }
+.save-btn[hidden], .print-btn[hidden] { display: none; }
 
 .card-grid {
   display: grid;
@@ -507,12 +517,35 @@ textarea.form-input { min-height: 96px; resize: vertical; }
 .modal-body { padding: 8px 18px 18px; overflow: auto; }
 .modal-close-btn, .close-footer-btn {
   background: transparent;
-  border: 1px solid var(--border2);
   color: var(--text2);
-  border-radius: var(--radius);
   cursor: pointer;
 }
-.modal-close-btn { border: none; font-size: 18px; }
+.modal-close-btn {
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+}
+.close-footer-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 8px 18px;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.close-footer-btn:hover { border-color: var(--aqua); color: var(--aqua); }
+.tier-lock-text { margin: 8px 0 4px; font-size: 16px; line-height: 1.5; color: var(--text); }
 .tutorial-body { white-space: pre-wrap; line-height: 1.6; color: var(--text); margin-bottom: 14px; }
 .tutorial-link { margin-top: 8px; }
 
@@ -664,14 +697,6 @@ textarea.form-input { min-height: 96px; resize: vertical; }
   margin: 8px 0;
 }
 .check-row input { accent-color: var(--aqua); }
-
-.folder-form {
-  display: grid;
-  gap: 8px;
-  max-width: 720px;
-  margin-top: 8px;
-}
-.folder-form .save-btn { justify-self: start; margin-top: 8px; }
 
 @media (max-width: 860px) {
   :root { --page-gutter: 14px; }

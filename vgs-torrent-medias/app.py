@@ -28,14 +28,16 @@ from hardening import (
     apply_proxy_fix,
     clear_password_reset,
     client_ip,
+    normalize_ip,
     pending_reset_user_id,
+    request_ips,
     start_password_reset,
     too_many_requests,
 )
 from models import (
-    AppMeta,
     DeviceBlock,
     LibraryItem,
+    NavDivider,
     RoleSection,
     Section,
     User,
@@ -320,20 +322,23 @@ def guard_manual_block():
 def manual_block_for_request():
     from datetime import datetime
 
-    ip = client_ip()
-    if not ip:
+    ips = {ip for ip in request_ips() if ip}
+    if not ips:
         return None
     now = datetime.utcnow()
-    return (
+    rows = (
         DeviceBlock.query.filter(
             DeviceBlock.manual.is_(True),
-            DeviceBlock.ip == ip,
             DeviceBlock.blocked_until.isnot(None),
             DeviceBlock.blocked_until > now,
         )
         .order_by(DeviceBlock.id.desc())
-        .first()
+        .all()
     )
+    for row in rows:
+        if normalize_ip(row.ip) in ips:
+            return row
+    return None
 
 
 @app.before_request
@@ -463,29 +468,19 @@ def painel():
         is_vgs_owner=current_user.is_vgs_owner,
         user_id=current_user.id,
         username=current_user.username,
+        seen_ip=client_ip(),
+        allowed_tiers=sorted(config.tiers_for(current_user.role)),
     )
 
 
-def meta_value(key: str, default: str) -> str:
-    row = db.session.get(AppMeta, key)
-    if row is None or not (row.value or "").strip():
-        return default
-    return row.value
-
-
-def set_meta(key: str, value: str) -> None:
-    row = db.session.get(AppMeta, key)
-    if row is None:
-        db.session.add(AppMeta(key=key, value=value))
-    else:
-        row.value = value
-
-
-def nav_folder_meta() -> dict:
-    return {
-        "title": meta_value("nav_folder_title", "Grupo")[:40],
-        "icon": meta_value("nav_folder_icon", "🗄️")[:8],
-    }
+def item_payload(item: LibraryItem) -> dict:
+    data = item.to_dict()
+    locked = not config.can_see_tier(current_user.role, data["tier"])
+    data["locked"] = locked
+    if locked:
+        data["url"] = ""
+        data["body"] = ""
+    return data
 
 
 def section_payload(section: Section, *, include_hidden=False) -> dict:
@@ -505,38 +500,51 @@ def api_list_sections():
         if staff
         else visible_sections()
     )
+    dividers = NavDivider.query.order_by(NavDivider.sort_order.asc(), NavDivider.id.asc()).all()
     return jsonify({
         "secoes": [section_payload(row, include_hidden=staff) for row in rows],
-        "grupo": nav_folder_meta(),
+        "divisoes": [row.to_dict() for row in dividers],
     })
 
 
-@app.route("/api/menu-grupo", methods=["PUT"])
+@app.route("/api/divisoes", methods=["POST"])
 @staff_required
-def api_save_nav_folder():
+def api_create_divider():
     data = request.get_json(silent=True) or {}
-    title = (data.get("title") or "").strip()[:40] or "Grupo"
-    icon = (data.get("icon") or "").strip()[:8] or "🗄️"
-    wanted = set()
-    for value in data.get("section_ids") or []:
-        try:
-            wanted.add(int(value))
-        except (TypeError, ValueError):
-            continue
-    valid = (
-        {
-            section_id
-            for (section_id,) in db.session.query(Section.id).filter(Section.id.in_(wanted)).all()
-        }
-        if wanted
-        else set()
-    )
-    for section in Section.query.all():
-        section.in_folder = section.id in valid
-    set_meta("nav_folder_title", title)
-    set_meta("nav_folder_icon", icon)
+    title = (data.get("title") or "").strip()[:40]
+    if len(title) < 2:
+        return jsonify({"erro": "Informe o nome da divisão."}), 400
+    row = NavDivider(title=title, sort_order=parse_sort(data.get("sort_order"), 0))
+    db.session.add(row)
     db.session.commit()
-    return jsonify({"ok": True, "grupo": nav_folder_meta(), "section_ids": sorted(valid)})
+    return jsonify({"divisao": row.to_dict()}), 201
+
+
+@app.route("/api/divisoes/<int:divider_id>", methods=["PUT"])
+@staff_required
+def api_update_divider(divider_id):
+    row = db.session.get(NavDivider, divider_id)
+    if not row:
+        return jsonify({"erro": "Divisão não encontrada."}), 404
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()[:40]
+    if len(title) < 2:
+        return jsonify({"erro": "Informe o nome da divisão."}), 400
+    row.title = title
+    row.sort_order = parse_sort(data.get("sort_order"), row.sort_order)
+    db.session.commit()
+    return jsonify({"divisao": row.to_dict()})
+
+
+@app.route("/api/divisoes/<int:divider_id>", methods=["DELETE"])
+@staff_required
+def api_delete_divider(divider_id):
+    row = db.session.get(NavDivider, divider_id)
+    if not row:
+        return jsonify({"erro": "Divisão não encontrada."}), 404
+    db.session.delete(row)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/secoes", methods=["POST"])
@@ -621,7 +629,7 @@ def api_list_items(section_id):
         items = visible_items(section)
     return jsonify({
         "secao": section_payload(section, include_hidden=staff),
-        "itens": [item.to_dict() for item in items],
+        "itens": [item_payload(item) for item in items],
     })
 
 
@@ -904,12 +912,14 @@ def api_save_access():
 
 
 def clean_block_ip(value: str):
-    text = (value or "").strip()
-    if not text or len(text) > 64:
-        return None
-    if not re.match(r"^[0-9a-fA-F:.]+$", text):
-        return None
-    return text
+    return normalize_ip(value) or None
+
+
+@app.route("/api/meu-ip")
+@staff_required
+def api_seen_ip():
+    ips = request_ips()
+    return jsonify({"ip": ips[0] if ips else "", "ips": ips})
 
 
 @app.route("/api/bloqueios", methods=["POST"])

@@ -10,7 +10,8 @@
     assignableRoles: VGS.roles || [],
     roleUserId: null,
     pickedRole: "",
-    folder: { title: "Grupo", icon: "🗄️" },
+    dividers: [],
+    seenIp: VGS.seenIp || "",
   };
 
   const $ = (id) => document.getElementById(id);
@@ -70,38 +71,34 @@
     </button>`;
   }
 
-  function folderIsOpen() {
-    try {
-      return localStorage.getItem("vgs-folder") !== "closed";
-    } catch (err) {
-      return true;
-    }
-  }
-
   function renderNav() {
     const nav = $("main-nav");
     if (!nav) return;
-    const loose = state.sections.filter((section) => !section.in_folder);
-    const grouped = state.sections.filter((section) => section.in_folder);
-    let folder = "";
-    if (grouped.length) {
-      const open = folderIsOpen();
-      const childActive = grouped.some((section) => String(section.id) === String(state.tab));
-      const icon = escapeHtml((state.folder && state.folder.icon) || "🗄️");
-      const title = escapeHtml((state.folder && state.folder.title) || "Grupo");
-      folder = `<div class="nav-folder${open ? " is-open" : ""}">
-        <button class="nav-folder-btn${childActive ? " has-active" : ""}" id="nav-folder-toggle" type="button" aria-expanded="${open ? "true" : "false"}" title="${title}">
-          <span class="tab-icon">${icon}</span>
-          <span class="nav-label">${title}</span>
-          <span class="folder-chevron" aria-hidden="true">▾</span>
-        </button>
-        <div class="nav-folder-items">${grouped.map(tabButton).join("")}</div>
-      </div>`;
-    }
+    const marks = [
+      ...state.sections.map((section) => ({
+        kind: "tab",
+        order: Number(section.sort_order) || 0,
+        section,
+      })),
+      ...state.dividers.map((divider) => ({
+        kind: "div",
+        order: Number(divider.sort_order) || 0,
+        divider,
+      })),
+    ];
+    marks.sort((a, b) => a.order - b.order || (a.kind === "div" ? -1 : 1));
+    const html = marks
+      .map((mark) => {
+        if (mark.kind === "div") {
+          return `<div class="nav-divider" title="${escapeHtml(mark.divider.title)}"><span class="nav-divider-label">${escapeHtml(mark.divider.title)}</span></div>`;
+        }
+        return tabButton(mark.section);
+      })
+      .join("");
     const admin = VGS.isAdmin
       ? `<button class="nav-tab${state.tab === "admin" ? " active" : ""}" data-tab="admin" type="button" title="Administração"><span class="tab-icon">⚙</span><span class="nav-label">Administração</span></button>`
       : "";
-    nav.innerHTML = loose.map(tabButton).join("") + folder + admin;
+    nav.innerHTML = html + admin;
   }
 
   function renderItems() {
@@ -128,11 +125,15 @@
               <button class="btn-sm btn-danger" type="button" data-del-item="${item.id}">Excluir</button>
             </div>`
           : "";
-        const open = item.kind === "tutorial" && item.body
-          ? `<button class="save-btn card-open" type="button" data-open-tutorial="${item.id}">ABRIR TUTORIAL</button>`
-          : item.url
-            ? `<a class="save-btn card-open" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">ABRIR ${item.kind === "tutorial" ? "TUTORIAL" : "DOWNLOAD"}</a>`
-            : "";
+        const locked = !!item.locked;
+        const openLabel = item.kind === "tutorial" ? "TUTORIAL" : "DOWNLOAD";
+        const open = locked
+          ? `<button class="save-btn card-open" type="button" data-locked-tier="${escapeHtml(item.tier_label || "VIP")}">ABRIR ${openLabel}</button>`
+          : item.kind === "tutorial" && item.body
+            ? `<button class="save-btn card-open" type="button" data-open-tutorial="${item.id}">ABRIR TUTORIAL</button>`
+            : item.url
+              ? `<a class="save-btn card-open" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">ABRIR ${openLabel}</a>`
+              : "";
         return `<article class="download-card">
           <div class="card-top">
             <span class="badge badge-${escapeHtml(item.kind)}">${escapeHtml(item.kind_label)}</span>
@@ -150,7 +151,7 @@
   async function loadSections(preferred) {
     const data = await request("/api/secoes");
     state.sections = data.secoes || [];
-    state.folder = data.grupo || state.folder;
+    state.dividers = data.divisoes || [];
     if (preferred && (preferred === "admin" || state.sections.some((row) => String(row.id) === String(preferred)))) {
       state.tab = preferred;
     } else if (!state.sections.some((row) => String(row.id) === String(state.tab)) && state.tab !== "admin") {
@@ -228,7 +229,17 @@
     openModal("section-modal");
   }
 
+  function showTierLock(label) {
+    const text = $("tier-modal-text");
+    if (text) text.textContent = `Você não possui acesso ${label || "VIP"}`;
+    openModal("tier-modal");
+  }
+
   function openTutorial(item) {
+    if (item.locked) {
+      showTierLock(item.tier_label);
+      return;
+    }
     $("tutorial-title").textContent = item.title;
     $("tutorial-body").textContent = item.body || item.description || "";
     const link = $("tutorial-link");
@@ -393,6 +404,12 @@
   async function loadBlocks() {
     const body = $("blocks-body");
     if (!body) return;
+    try {
+      const seen = await request("/api/meu-ip");
+      state.seenIp = seen.ip || state.seenIp;
+      const label = $("seen-ip");
+      if (label && state.seenIp) label.textContent = state.seenIp;
+    } catch (err) {}
     const data = await request("/api/bloqueios");
     const rows = data.bloqueios || [];
     if (!rows.length) {
@@ -464,44 +481,50 @@
     });
   }
 
-  function renderFolderForm() {
-    const box = $("folder-checks");
-    if (!box) return;
-    const title = $("folder-title");
-    const icon = $("folder-icon");
-    if (title) title.value = (state.folder && state.folder.title) || "Grupo";
-    if (icon) icon.value = (state.folder && state.folder.icon) || "🗄️";
-    if (!state.sections.length) {
-      box.innerHTML = `<span class="text-muted">Nenhuma aba criada.</span>`;
+  function renderDividers() {
+    const body = $("dividers-body");
+    if (!body) return;
+    if (!state.dividers.length) {
+      body.innerHTML = `<tr><td colspan="3" class="empty">Nenhuma divisão. As abas ficam em sequência.</td></tr>`;
       return;
     }
-    box.innerHTML = state.sections
+    body.innerHTML = state.dividers
       .map(
-        (section) => `<label class="check-row">
-          <input type="checkbox" data-folder-section="${section.id}"${section.in_folder ? " checked" : ""}>
-          <span>${escapeHtml(section.icon || "💾")} ${escapeHtml(section.title)}</span>
-        </label>`
+        (divider) => `<tr>
+          <td><strong>${escapeHtml(divider.title)}</strong></td>
+          <td>${Number(divider.sort_order) || 0}</td>
+          <td>
+            <div class="actions-stack">
+              <button class="btn-sm btn-save-role" type="button" data-edit-divider="${divider.id}">Editar</button>
+              <button class="btn-sm btn-danger" type="button" data-del-divider="${divider.id}">Excluir</button>
+            </div>
+          </td>
+        </tr>`
       )
       .join("");
   }
 
+  function openDividerModal(divider) {
+    $("divider-id").value = divider ? divider.id : "";
+    $("divider-title").value = divider ? divider.title : "";
+    $("divider-order").value = divider ? divider.sort_order || 0 : 15;
+    $("divider-modal-title").textContent = divider ? "Editar divisão" : "Nova divisão";
+    openModal("divider-modal");
+  }
+
   async function loadAdminTables() {
     renderSections();
-    renderFolderForm();
+    renderDividers();
     await loadAccess();
     await loadUsers();
     await loadBlocks();
   }
 
   document.addEventListener("click", async (event) => {
-    const folderBtn = event.target.closest("#nav-folder-toggle");
-    if (folderBtn) {
-      const wrap = folderBtn.closest(".nav-folder");
-      const open = wrap.classList.toggle("is-open");
-      folderBtn.setAttribute("aria-expanded", open ? "true" : "false");
-      try {
-        localStorage.setItem("vgs-folder", open ? "open" : "closed");
-      } catch (err) {}
+    const lockedBtn = event.target.closest("[data-locked-tier]");
+    if (lockedBtn) {
+      event.preventDefault();
+      showTierLock(lockedBtn.dataset.lockedTier);
       return;
     }
 
@@ -557,7 +580,12 @@
       if (form) form.reset();
       const time = $("manual-time-wrap");
       if (time) time.hidden = false;
+      if ($("manual-ip") && state.seenIp) $("manual-ip").value = state.seenIp;
       openModal("manual-block-modal");
+      return;
+    }
+    if (event.target.closest("#btn-add-divider")) {
+      openDividerModal(null);
       return;
     }
     if (event.target.closest("#btn-add-user")) {
@@ -605,6 +633,24 @@
         state.tab = "admin";
         await loadSections("admin");
         renderSections();
+      } catch (err) {
+        showToast("✘ " + err.message);
+      }
+      return;
+    }
+    const editDivider = event.target.closest("[data-edit-divider]");
+    if (editDivider) {
+      const divider = state.dividers.find((row) => String(row.id) === editDivider.dataset.editDivider);
+      if (divider) openDividerModal(divider);
+      return;
+    }
+    const delDivider = event.target.closest("[data-del-divider]");
+    if (delDivider) {
+      if (!confirm("Excluir esta divisão?")) return;
+      try {
+        await request(`/api/divisoes/${delDivider.dataset.delDivider}`, { method: "DELETE" });
+        showToast("✔ Divisão excluída");
+        await loadSections("admin");
       } catch (err) {
         showToast("✘ " + err.message);
       }
@@ -735,22 +781,22 @@
       }
       return;
     }
-    if (event.target.id === "folder-form") {
+    if (event.target.id === "divider-form") {
       event.preventDefault();
-      const sectionIds = [...document.querySelectorAll("[data-folder-section]")]
-        .filter((box) => box.checked)
-        .map((box) => Number(box.dataset.folderSection));
+      const id = $("divider-id").value;
+      const payload = {
+        title: $("divider-title").value.trim(),
+        sort_order: Number($("divider-order").value || 0),
+      };
       try {
-        await request("/api/menu-grupo", {
-          method: "PUT",
-          body: JSON.stringify({
-            title: $("folder-title").value.trim(),
-            icon: $("folder-icon").value.trim(),
-            section_ids: sectionIds,
-          }),
-        });
-        showToast("✔ Botão atualizado");
-        await loadSections(state.tab);
+        if (id) {
+          await request(`/api/divisoes/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+        } else {
+          await request("/api/divisoes", { method: "POST", body: JSON.stringify(payload) });
+        }
+        showToast("✔ Divisão salva");
+        closeModal("divider-modal");
+        await loadSections("admin");
       } catch (err) {
         showToast("✘ " + err.message);
       }

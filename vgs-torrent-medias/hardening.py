@@ -1,4 +1,5 @@
 import os
+import re
 import secrets
 import time
 from collections import deque
@@ -40,8 +41,40 @@ def apply_proxy_fix(app) -> None:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
+def normalize_ip(value: str) -> str:
+    text = (value or "").strip().strip("[]")
+    if not text or len(text) > 64 or " " in text:
+        return ""
+    if text.lower().startswith("::ffff:"):
+        text = text[7:]
+    if "%" in text:
+        text = text.split("%", 1)[0]
+    if not re.match(r"^[0-9a-fA-F:.]+$", text):
+        return ""
+    return text.lower() if ":" in text else text
+
+
+def request_ips() -> list[str]:
+    parts = []
+    for name in ("X-Vercel-Forwarded-For", "X-Real-IP", "X-Forwarded-For"):
+        parts.extend((request.headers.get(name) or "").split(","))
+    try:
+        parts.extend(list(request.access_route or []))
+    except RuntimeError:
+        pass
+    if request.remote_addr:
+        parts.append(request.remote_addr)
+    found = []
+    for part in parts:
+        ip = normalize_ip(part)
+        if ip and ip not in found:
+            found.append(ip)
+    return found
+
+
 def client_ip() -> str:
-    return (request.remote_addr or "")[:64]
+    ips = request_ips()
+    return ips[0][:64] if ips else ""
 
 
 def too_many_requests(scope: str, limit: int, window_sec: int) -> bool:
