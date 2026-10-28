@@ -54,22 +54,22 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 ROLES = [
     "vgs_owner",
     "admin",
+    "vgs_pro_client",
+    "vgs_client",
     "super_vip",
     "mega_vip",
     "vip",
-    "vgs_pro_client",
-    "vgs_client",
     "visitante",
 ]
 
 ROLE_LABELS = {
     "vgs_owner": "VGS-Owner's",
     "admin": "Admin",
+    "vgs_pro_client": "VGS-Pro Client",
+    "vgs_client": "VGS-Client",
     "super_vip": "Super VIP",
     "mega_vip": "Mega VIP",
     "vip": "VIP",
-    "vgs_pro_client": "VGS-Pro Client",
-    "vgs_client": "VGS-Client",
     "visitante": "Básico",
 }
 

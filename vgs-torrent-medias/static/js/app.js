@@ -423,7 +423,14 @@
     state.roleUserId = user.id;
     state.pickedRole = user.role;
     $("role-user-label").textContent = `${user.username} · ${user.email}`;
-    const roles = [...new Set([user.role, ...(state.assignableRoles || [])])];
+    const order = state.assignableRoles || [];
+    const roles = [...new Set([...order, user.role])].sort((a, b) => {
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      if (ia < 0) return -1;
+      if (ib < 0) return 1;
+      return ia - ib;
+    });
     $("role-options").innerHTML = roles
       .map(
         (role) => `<button class="role-option${role === user.role ? " selected" : ""}" type="button" data-pick-role="${role}">
