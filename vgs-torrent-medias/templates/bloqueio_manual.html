@@ -11,36 +11,36 @@
       <a href="https://ds-vanguards.vercel.app/" target="_blank" rel="noopener">DS-Vanguards</a>
       para alteração de acesso ou renovação.
     </p>
-    <button class="copy-serial-btn" id="copy-serial" type="button" data-serial="{{ serial or '' }}">Copiar serial</button>
+    <div class="lock-actions">
+      <button class="copy-serial-btn" id="copy-serial" type="button" data-copy="{{ serial or '' }}" data-done="Serial copiado">Copiar serial</button>
+      <button class="copy-serial-btn" id="copy-ip" type="button" data-copy="{{ blocked_ip or '' }}" data-done="IP copiado">Copiar IP</button>
+    </div>
   </div>
 </div>
 <script>
   (function () {
-    var button = document.getElementById("copy-serial");
-    if (!button) return;
-    button.addEventListener("click", function () {
-      var serial = button.getAttribute("data-serial") || "";
-      if (!serial) return;
-      var done = function () { button.textContent = "Serial copiado"; };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(serial).then(done).catch(function () {
+    document.querySelectorAll(".copy-serial-btn").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var value = button.getAttribute("data-copy") || "";
+        if (!value) return;
+        var done = function () {
+          button.textContent = button.getAttribute("data-done") || "Copiado";
+        };
+        var fallback = function () {
           var area = document.createElement("textarea");
-          area.value = serial;
+          area.value = value;
           document.body.appendChild(area);
           area.select();
           document.execCommand("copy");
           area.remove();
           done();
-        });
-        return;
-      }
-      var area = document.createElement("textarea");
-      area.value = serial;
-      document.body.appendChild(area);
-      area.select();
-      document.execCommand("copy");
-      area.remove();
-      done();
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(value).then(done).catch(fallback);
+          return;
+        }
+        fallback();
+      });
     });
   })();
 </script>

@@ -92,7 +92,10 @@
 
     <div class="admin-users-head" style="margin-top:28px">
       <div class="section-title" style="margin:0;padding:0;border:none">Máquinas bloqueadas</div>
-      <button class="save-btn" id="btn-add-block" type="button">+ BLOQUEAR MÁQUINA</button>
+      <div class="head-actions">
+        <button class="save-btn" id="btn-find-block" type="button">BUSCAR MÁQUINA</button>
+        <button class="save-btn" id="btn-add-block" type="button">+ BLOQUEAR MÁQUINA</button>
+      </div>
     </div>
     <p class="admin-hint">IP e serial são bloqueados pelo valor. Ambos usa o usuário ou o e-mail e trava o IP e o serial vistos nessa conta. O IP desta visita é <strong id="seen-ip">{{ seen_ip or "—" }}</strong>.</p>
     <div class="table-wrap admin-table-wrap">
@@ -391,6 +394,23 @@
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="find-block-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Buscar máquina</span>
+      <button class="modal-close-btn" type="button" data-close="find-block-modal">✕</button>
+    </div>
+    <form class="modal-body" id="find-block-form">
+      <label for="find-block-query">Serial ou IP</label>
+      <input class="form-input" id="find-block-query" maxlength="80" placeholder="Cole o serial ou o IP" autocomplete="off" required>
+      <p class="admin-hint" id="find-block-result"></p>
+    </form>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="find-block-modal">CANCELAR</button>
+      <button class="print-btn" type="submit" form="find-block-form">BUSCAR</button>
+    </div>
+  </div>
+</div>
 {% endif %}
 {% endblock %}
 {% block scripts %}
@@ -409,5 +429,5 @@
     seenIp: {{ seen_ip | tojson }}
   };
 </script>
-<script src="{{ url_for('static', filename='js/app.js') }}?v=11" defer></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=12" defer></script>
 {% endblock %}

@@ -13,7 +13,7 @@
     dividers: [],
     seenIp: VGS.seenIp || "",
     access: null,
-    channels: null,
+    blocks: [],
     userWatch: 0,
   };
 
@@ -490,6 +490,42 @@
     return `${attempts}${ip}`;
   }
 
+  function openFindBlock() {
+    const form = $("find-block-form");
+    if (form) form.reset();
+    const result = $("find-block-result");
+    if (result) result.textContent = "";
+    openModal("find-block-modal");
+  }
+
+  function showBlockedMachine(query) {
+    const needle = query.trim().toLowerCase();
+    const result = $("find-block-result");
+    document.querySelectorAll("#blocks-body tr.block-hit").forEach((row) => row.classList.remove("block-hit"));
+    if (!needle) {
+      if (result) result.textContent = "Informe o serial ou o IP.";
+      return;
+    }
+    const matches = (state.blocks || []).filter((row) => {
+      const ip = String(row.ip || "").trim().toLowerCase();
+      const serial = String(row.serial || "").trim().toLowerCase();
+      const token = String(row.token || "").trim().toLowerCase();
+      return needle === ip || needle === serial || needle === token || (serial.startsWith(needle) && needle.length >= 12);
+    });
+    if (!matches.length) {
+      if (result) result.textContent = "Nenhuma máquina bloqueada com esse IP ou serial.";
+      return;
+    }
+    matches.forEach((row) => {
+      const line = document.querySelector(`#blocks-body tr[data-block-row="${row.id}"]`);
+      if (line) line.classList.add("block-hit");
+    });
+    const first = document.querySelector("#blocks-body tr.block-hit");
+    closeModal("find-block-modal");
+    if (first) first.scrollIntoView({ block: "center", behavior: "smooth" });
+    showToast(matches.length === 1 ? "✔ Máquina encontrada" : `✔ ${matches.length} máquinas encontradas`);
+  }
+
   async function loadBlocks() {
     const body = $("blocks-body");
     if (!body) return;
@@ -500,14 +536,15 @@
       if (label && state.seenIp) label.textContent = state.seenIp;
     } catch (err) {}
     const data = await request("/api/bloqueios");
-    const rows = data.bloqueios || [];
+    state.blocks = data.bloqueios || [];
+    const rows = state.blocks;
     if (!rows.length) {
       body.innerHTML = `<tr><td colspan="5" class="empty">Nenhuma máquina bloqueada.</td></tr>`;
       return;
     }
     body.innerHTML = rows
       .map(
-        (row) => `<tr>
+        (row) => `<tr data-block-row="${row.id}">
           <td style="font-family:var(--mono);font-size:11px">${escapeHtml(row.token)}</td>
           <td>${blockTarget(row)}</td>
           <td><span class="badge ${row.manual || row.strike_level >= 6 ? "badge-danger" : "badge-yellow"}">${escapeHtml(row.level_label)}</span></td>
@@ -726,6 +763,10 @@
       openSectionModal(null);
       return;
     }
+    if (event.target.closest("#btn-find-block")) {
+      openFindBlock();
+      return;
+    }
     if (event.target.closest("#btn-add-block")) {
       openManualBlock({ mode: "ip", ip: state.seenIp || "" });
       return;
@@ -919,6 +960,17 @@
         showToast("✔ Bloqueio atualizado");
         closeModal("block-modal");
         await loadBlocks();
+      } catch (err) {
+        showToast("✘ " + err.message);
+      }
+      return;
+    }
+    if (event.target.id === "find-block-form") {
+      event.preventDefault();
+      const query = $("find-block-query") ? $("find-block-query").value : "";
+      try {
+        await loadBlocks();
+        showBlockedMachine(query);
       } catch (err) {
         showToast("✘ " + err.message);
       }

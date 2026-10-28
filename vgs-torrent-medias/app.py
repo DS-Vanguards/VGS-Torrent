@@ -345,7 +345,11 @@ def guard_manual_block():
     if block:
         serial = machine_serial_for_page()
         absorb_blocked_identity(block, serial)
-        return render_template("bloqueio_manual.html", serial=serial)
+        return render_template(
+            "bloqueio_manual.html",
+            serial=serial,
+            blocked_ip=client_ip() or "",
+        )
 
 
 def manual_block_for_request():
