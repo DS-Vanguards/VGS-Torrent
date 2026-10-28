@@ -343,11 +343,17 @@ def manual_block_for_request():
         .all()
     )
     for row in rows:
-        if row.match_serial:
-            if cookie and cookie == (row.token or "").lower():
+        cookie_hit = bool(cookie and cookie == (row.token or "").lower())
+        ip_hit = normalize_ip(row.ip) in ips
+        if row.match_both:
+            if cookie_hit or ip_hit:
                 return row
             continue
-        if normalize_ip(row.ip) in ips:
+        if row.match_serial:
+            if cookie_hit:
+                return row
+            continue
+        if ip_hit:
             return row
     return None
 
@@ -992,6 +998,29 @@ def api_create_block():
             return jsonify({"erro": "Esse serial ainda não apareceu. A pessoa precisa abrir o site nesse navegador."}), 400
         row.manual = True
         row.match_serial = True
+        row.match_both = False
+        row.blocked_until = until
+        row.updated_at = datetime.utcnow()
+    elif mode == "ambos":
+        account = (data.get("account") or "").strip().lower()
+        if not account:
+            return jsonify({"erro": "Informe o usuário ou o e-mail."}), 400
+        person = User.query.filter(
+            (func.lower(User.username) == account) | (func.lower(User.email) == account)
+        ).first()
+        if person is None:
+            return jsonify({"erro": "Usuário ou e-mail não encontrado."}), 400
+        ip = clean_block_ip(person.last_ip or "")
+        serial = clean_serial(person.machine_serial or "")
+        if not ip or not serial:
+            return jsonify({"erro": "Essa conta ainda não tem IP e serial. A pessoa precisa abrir o site nesse navegador."}), 400
+        row = DeviceBlock.query.filter_by(token=serial).first()
+        if row is None:
+            return jsonify({"erro": "Esse serial ainda não apareceu. A pessoa precisa abrir o site nesse navegador."}), 400
+        row.ip = ip
+        row.manual = True
+        row.match_serial = False
+        row.match_both = True
         row.blocked_until = until
         row.updated_at = datetime.utcnow()
     else:
@@ -1003,6 +1032,7 @@ def api_create_block():
             ip=ip,
             manual=True,
             match_serial=False,
+            match_both=False,
             attempt_count=0,
             strike_level=0,
             blocked_until=until,

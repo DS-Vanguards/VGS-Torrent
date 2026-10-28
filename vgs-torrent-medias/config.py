@@ -95,7 +95,7 @@ TIER_LABELS = {
     "mega_vip": "Mega VIP",
     "super_vip": "Super VIP",
     "escolar": "Escolar",
-    "pro_client": "Pro Client",
+    "pro_client": "VGS-Pro Client",
 }
 
 TIER_ACCESS = {

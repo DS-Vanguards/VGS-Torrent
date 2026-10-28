@@ -88,7 +88,7 @@
       <div class="section-title" style="margin:0;padding:0;border:none">Máquinas bloqueadas</div>
       <button class="save-btn" id="btn-add-block" type="button">+ BLOQUEAR MÁQUINA</button>
     </div>
-    <p class="admin-hint">Dá para bloquear pelo IP ou pelo serial do navegador. O IP desta visita é <strong id="seen-ip">{{ seen_ip or "—" }}</strong>. Bloquear o IP trava esse endereço. Bloquear o serial trava aquele navegador mesmo se o IP mudar. O serial aparece na lista de usuários depois que a pessoa abre o site.</p>
+    <p class="admin-hint">IP e serial são bloqueados pelo valor. Ambos usa o usuário ou o e-mail e trava o IP e o serial vistos nessa conta. O IP desta visita é <strong id="seen-ip">{{ seen_ip or "—" }}</strong>.</p>
     <div class="table-wrap admin-table-wrap">
       <table class="resumo-table">
         <thead>
@@ -330,6 +330,7 @@
       <select class="form-input" id="manual-mode">
         <option value="ip">IP</option>
         <option value="serial">Serial do navegador</option>
+        <option value="ambos">Ambos</option>
       </select>
       <div id="manual-ip-wrap">
         <label for="manual-ip">IP</label>
@@ -337,7 +338,11 @@
       </div>
       <div id="manual-serial-wrap" hidden>
         <label for="manual-serial">Serial</label>
-        <input class="form-input" id="manual-serial" maxlength="64" placeholder="Cole o serial da lista de usuários" autocomplete="off">
+        <input class="form-input" id="manual-serial" maxlength="64" placeholder="Cole o serial da lista" autocomplete="off">
+      </div>
+      <div id="manual-account-wrap" hidden>
+        <label for="manual-account">Usuário ou e-mail</label>
+        <input class="form-input" id="manual-account" maxlength="120" placeholder="Ex: christopher ou christopher@gmail.com" autocomplete="off">
       </div>
       <label class="check-row" for="manual-permanent">
         <input type="checkbox" id="manual-permanent">
@@ -380,5 +385,5 @@
     seenIp: {{ seen_ip | tojson }}
   };
 </script>
-<script src="{{ url_for('static', filename='js/app.js') }}?v=7" defer></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=8" defer></script>
 {% endblock %}

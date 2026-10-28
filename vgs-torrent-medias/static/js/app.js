@@ -348,13 +348,16 @@
   }
 
   function syncBlockMode() {
-    const serial = $("manual-mode") && $("manual-mode").value === "serial";
+    const mode = $("manual-mode") ? $("manual-mode").value : "ip";
     const ipWrap = $("manual-ip-wrap");
     const serialWrap = $("manual-serial-wrap");
-    if (ipWrap) ipWrap.hidden = !!serial;
-    if (serialWrap) serialWrap.hidden = !serial;
-    if ($("manual-ip")) $("manual-ip").required = !serial;
-    if ($("manual-serial")) $("manual-serial").required = !!serial;
+    const accountWrap = $("manual-account-wrap");
+    if (ipWrap) ipWrap.hidden = mode !== "ip";
+    if (serialWrap) serialWrap.hidden = mode !== "serial";
+    if (accountWrap) accountWrap.hidden = mode !== "ambos";
+    if ($("manual-ip")) $("manual-ip").required = mode === "ip";
+    if ($("manual-serial")) $("manual-serial").required = mode === "serial";
+    if ($("manual-account")) $("manual-account").required = mode === "ambos";
   }
 
   function openManualBlock(preset) {
@@ -364,6 +367,7 @@
     if ($("manual-mode")) $("manual-mode").value = mode;
     if ($("manual-ip")) $("manual-ip").value = (preset && preset.ip) || (mode === "ip" ? state.seenIp || "" : "");
     if ($("manual-serial")) $("manual-serial").value = (preset && preset.serial) || "";
+    if ($("manual-account")) $("manual-account").value = (preset && preset.account) || "";
     const time = $("manual-time-wrap");
     if (time) time.hidden = false;
     syncBlockMode();
@@ -398,16 +402,9 @@
           : "";
         const ip = user.last_ip || "";
         const serial = user.machine_serial || "";
-        const blockIp = ip
-          ? `<button class="btn-sm btn-danger" type="button" data-block-ip="${escapeHtml(ip)}">Bloquear IP</button>`
-          : "";
-        const blockSerial = serial
-          ? `<button class="btn-sm btn-danger" type="button" data-block-serial="${escapeHtml(serial)}">Bloquear serial</button>`
-          : "";
         const device = `<div class="device-cell">
             <span>${escapeHtml(ip || "—")}</span>
             <span class="text-muted" title="${escapeHtml(serial)}">${escapeHtml(serial ? serial.slice(0, 16) : "sem serial")}</span>
-            <div class="actions-stack">${blockIp}${blockSerial}</div>
           </div>`;
         return `<tr>
           <td><strong>${escapeHtml(user.username)}</strong> ${pending}</td>
@@ -472,7 +469,7 @@
       .map(
         (row) => `<tr>
           <td style="font-family:var(--mono);font-size:11px">${escapeHtml(row.token)}</td>
-          <td>${row.match_serial ? `<span title="${escapeHtml(row.serial)}">Serial ${escapeHtml((row.serial || "").slice(0, 12))}</span>` : escapeHtml(row.ip)}</td>
+          <td>${row.match_both ? `IP ${escapeHtml(row.ip)} · Serial ${escapeHtml((row.serial || "").slice(0, 12))}` : row.match_serial ? `<span title="${escapeHtml(row.serial)}">Serial ${escapeHtml((row.serial || "").slice(0, 12))}</span>` : escapeHtml(row.ip)}</td>
           <td><span class="badge ${row.manual || row.strike_level >= 6 ? "badge-danger" : "badge-yellow"}">${escapeHtml(row.level_label)}</span></td>
           <td>${escapeHtml(row.blocked_until)}</td>
           <td>
@@ -637,16 +634,6 @@
     }
     if (event.target.closest("#btn-add-block")) {
       openManualBlock({ mode: "ip", ip: state.seenIp || "" });
-      return;
-    }
-    const blockIp = event.target.closest("[data-block-ip]");
-    if (blockIp) {
-      openManualBlock({ mode: "ip", ip: blockIp.dataset.blockIp || "" });
-      return;
-    }
-    const blockSerial = event.target.closest("[data-block-serial]");
-    if (blockSerial) {
-      openManualBlock({ mode: "serial", serial: blockSerial.dataset.blockSerial || "" });
       return;
     }
     if (event.target.closest("#btn-add-divider")) {
@@ -845,6 +832,7 @@
             mode,
             ip: mode === "ip" ? $("manual-ip").value.trim() : "",
             serial: mode === "serial" ? $("manual-serial").value.trim() : "",
+            account: mode === "ambos" ? $("manual-account").value.trim() : "",
             permanent,
             amount: permanent ? null : $("manual-amount").value,
             unit: $("manual-unit").value,

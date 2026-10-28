@@ -72,6 +72,7 @@ class DeviceBlock(db.Model):
     strike_level = db.Column(db.Integer, default=0, nullable=False)
     manual = db.Column(db.Boolean, default=False, nullable=False)
     match_serial = db.Column(db.Boolean, default=False, nullable=False)
+    match_both = db.Column(db.Boolean, default=False, nullable=False)
     blocked_until = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -96,9 +97,16 @@ class DeviceBlock(db.Model):
             "blocked_until": until_label,
             "manual": bool(self.manual),
             "match_serial": bool(self.match_serial),
-            "serial": self.token if self.match_serial else "",
+            "match_both": bool(self.match_both),
+            "serial": self.token if (self.match_serial or self.match_both) else "",
             "level_label": (
-                "Serial" if self.match_serial else "IP" if self.manual else ("1 dia" if self.strike_level >= 6 else "5 min")
+                "Ambos"
+                if self.match_both
+                else "Serial"
+                if self.match_serial
+                else "IP"
+                if self.manual
+                else ("1 dia" if self.strike_level >= 6 else "5 min")
             ),
         }
 
@@ -256,6 +264,7 @@ def ensure_schema() -> None:
     _add_column("users", "machine_serial", "VARCHAR(64) NOT NULL DEFAULT ''")
     _add_column("device_blocks", "manual", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
     _add_column("device_blocks", "match_serial", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
+    _add_column("device_blocks", "match_both", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
     mark_primary_user()
 
 
@@ -329,6 +338,18 @@ def init_default_data() -> None:
                     )
                 )
             db.session.commit()
+        Section.query.filter(
+            Section.description.in_(
+                (
+                    "Conteúdos do VGS-Client Pro, além do ambiente escolar.",
+                    "Conteúdos do VGS Pro Client, além do ambiente escolar.",
+                )
+            )
+        ).update(
+            {"description": "Conteúdos do VGS-Pro Client, além do ambiente escolar."},
+            synchronize_session=False,
+        )
+        db.session.commit()
         seed_role_channels()
     except IntegrityError:
         db.session.rollback()
