@@ -70,7 +70,7 @@ ROLE_LABELS = {
     "vip": "VIP",
     "vgs_pro_client": "VGS-Pro Client",
     "vgs_client": "VGS-Client",
-    "visitante": "Visitante",
+    "visitante": "Básico",
 }
 
 ROLE_RANK = {
@@ -94,7 +94,7 @@ TIER_LABELS = {
     "vip": "VIP",
     "mega_vip": "Mega VIP",
     "super_vip": "Super VIP",
-    "escolar": "Escolar",
+    "escolar": "VGS-Client",
     "pro_client": "VGS-Pro Client",
 }
 

@@ -440,7 +440,7 @@ def register():
                 user.set_password(password)
                 db.session.add(user)
                 db.session.commit()
-                flash("Conta de visitante criada. Entre para continuar.", "success")
+                flash("Conta básica criada. Entre para continuar.", "success")
                 return with_device_cookie(redirect(url_for("login")), device)
 
     return with_device_cookie(render_template("register.html"), device)
