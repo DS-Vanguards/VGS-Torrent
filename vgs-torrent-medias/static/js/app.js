@@ -12,6 +12,7 @@
     pickedRole: "",
     dividers: [],
     seenIp: VGS.seenIp || "",
+    access: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -434,51 +435,59 @@
       .join("");
   }
 
-  function renderAccess(data) {
-    const panel = $("access-panel");
-    if (!panel) return;
-    const sections = data.secoes || [];
-    const roles = data.cargos || [];
-    if (!roles.length) {
-      panel.innerHTML = `<p class="admin-hint">Nenhum cargo configurável.</p>`;
+  async function loadAccess() {
+    if (!$("btn-access")) return;
+    state.access = await request("/api/acessos");
+  }
+
+  function renderAccessChecks() {
+    const box = $("access-checks");
+    if (!box) return;
+    const roles = (state.access && state.access.cargos) || [];
+    const sections = (state.access && state.access.secoes) || [];
+    const role = roles.find((row) => row.role === ($("access-role") ? $("access-role").value : ""));
+    if (!role) {
+      box.innerHTML = `<p class="admin-hint">Nenhum cargo configurável.</p>`;
       return;
     }
-    panel.innerHTML = roles
-      .map((role) => {
-        const selected = new Set((role.section_ids || []).map(String));
-        const boxes = sections.length
-          ? sections
-              .map(
-                (section) => `<label class="check-row">
-                  <input type="checkbox" data-access-role="${escapeHtml(role.role)}" data-access-section="${section.id}"${selected.has(String(section.id)) ? " checked" : ""}>
-                  <span>${escapeHtml(section.icon)} ${escapeHtml(section.title)}</span>
-                </label>`
-              )
-              .join("")
-          : `<span class="text-muted">Nenhuma aba criada.</span>`;
-        return `<section class="access-card" data-role-card="${escapeHtml(role.role)}">
-          <h3>${escapeHtml(role.label)}</h3>
-          <div class="access-grid">${boxes}</div>
-        </section>`;
-      })
+    if (!sections.length) {
+      box.innerHTML = `<p class="text-muted">Nenhuma aba criada.</p>`;
+      return;
+    }
+    const selected = new Set((role.section_ids || []).map(String));
+    box.innerHTML = sections
+      .map(
+        (section) => `<label class="check-row">
+          <input type="checkbox" data-access-section="${section.id}"${selected.has(String(section.id)) ? " checked" : ""}>
+          <span>${escapeHtml(section.icon)} ${escapeHtml(section.title)}</span>
+        </label>`
+      )
       .join("");
   }
 
-  async function loadAccess() {
-    if (!$("access-panel")) return;
-    const data = await request("/api/acessos");
-    renderAccess(data);
+  function openAccessModal() {
+    const select = $("access-role");
+    const roles = (state.access && state.access.cargos) || [];
+    if (select) {
+      select.innerHTML = roles.length
+        ? roles
+            .map((role) => `<option value="${escapeHtml(role.role)}">${escapeHtml(role.label)}</option>`)
+            .join("")
+        : `<option value="">Nenhum cargo configurável</option>`;
+    }
+    renderAccessChecks();
+    openModal("access-modal");
   }
 
   async function saveAccess(role) {
-    const boxes = [...document.querySelectorAll("[data-access-role]")].filter(
-      (box) => box.dataset.accessRole === role
-    );
+    const boxes = [...document.querySelectorAll("#access-checks [data-access-section]")];
     const sectionIds = boxes.filter((box) => box.checked).map((box) => Number(box.dataset.accessSection));
-    await request("/api/acessos", {
+    const data = await request("/api/acessos", {
       method: "PUT",
       body: JSON.stringify({ role, section_ids: sectionIds }),
     });
+    const cargo = ((state.access && state.access.cargos) || []).find((row) => row.role === role);
+    if (cargo) cargo.section_ids = data.section_ids || sectionIds;
   }
 
   function renderDividers() {
@@ -586,6 +595,15 @@
     }
     if (event.target.closest("#btn-add-divider")) {
       openDividerModal(null);
+      return;
+    }
+    if (event.target.closest("#btn-access")) {
+      try {
+        if (!state.access) await loadAccess();
+        openAccessModal();
+      } catch (err) {
+        showToast("✘ " + err.message);
+      }
       return;
     }
     if (event.target.closest("#btn-add-user")) {
@@ -800,6 +818,22 @@
       } catch (err) {
         showToast("✘ " + err.message);
       }
+      return;
+    }
+    if (event.target.id === "access-form") {
+      event.preventDefault();
+      const role = $("access-role") ? $("access-role").value : "";
+      if (!role) {
+        showToast("✘ Selecione um cargo");
+        return;
+      }
+      try {
+        await saveAccess(role);
+        showToast("✔ Canais atualizados");
+        closeModal("access-modal");
+      } catch (err) {
+        showToast("✘ " + err.message);
+      }
     }
   });
 
@@ -812,15 +846,7 @@
       if (time) time.hidden = event.target.checked;
       return;
     }
-    const box = event.target.closest("[data-access-role]");
-    if (!box) return;
-    try {
-      await saveAccess(box.dataset.accessRole);
-      showToast("✔ Canais atualizados");
-    } catch (err) {
-      showToast("✘ " + err.message);
-      loadAccess().catch(() => {});
-    }
+    if (event.target.id === "access-role") renderAccessChecks();
   });
 
   const collapse = $("sidebar-collapse");

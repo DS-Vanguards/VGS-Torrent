@@ -40,9 +40,11 @@
       </table>
     </div>
 
-    <div class="section-title" style="margin-top:28px">Canais por cargo</div>
-    <p class="admin-hint">Marque as abas de cada cargo. <strong>Admin</strong> e <strong>VGS-Owner's</strong> ficam de fora e mantêm o acesso total. Uma aba nova só aparece para os cargos marcados.</p>
-    <div id="access-panel"></div>
+    <div class="admin-users-head" style="margin-top:28px">
+      <div class="section-title" style="margin:0;padding:0;border:none">Canais por cargo</div>
+      <button class="save-btn" id="btn-access" type="button">ATRIBUIR CANAIS</button>
+    </div>
+    <p class="admin-hint">Admin e VGS-Owner's veem todas as abas. Os outros cargos só veem as abas marcadas no formulário.</p>
 
     <div class="admin-users-head" style="margin-top:28px">
       <div class="section-title" style="margin:0;padding:0;border:none">Divisões da lateral</div>
@@ -228,6 +230,24 @@
 {% endif %}
 
 {% if is_admin %}
+<div class="modal-overlay" id="access-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Canais por cargo</span>
+      <button class="modal-close-btn" type="button" data-close="access-modal">✕</button>
+    </div>
+    <form class="modal-body" id="access-form">
+      <p class="admin-hint">Escolha o cargo e marque as abas que ele pode ver. Salve antes de trocar de cargo.</p>
+      <label for="access-role">Cargo</label>
+      <select class="form-input" id="access-role" required></select>
+      <div id="access-checks" class="access-checks"></div>
+    </form>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="access-modal">CANCELAR</button>
+      <button class="print-btn" type="submit" form="access-form">SALVAR</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="user-modal">
   <div class="modal">
     <div class="modal-header">
@@ -348,5 +368,5 @@
     seenIp: {{ seen_ip | tojson }}
   };
 </script>
-<script src="{{ url_for('static', filename='js/app.js') }}?v=5" defer></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=6" defer></script>
 {% endblock %}
