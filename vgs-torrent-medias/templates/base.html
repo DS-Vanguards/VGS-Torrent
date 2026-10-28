@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=9">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=10">
   <script>
     try {
       if (localStorage.getItem("vgs-side") === "mini") document.documentElement.classList.add("side-mini");
@@ -47,6 +47,7 @@
     </button>
   </aside>
   {% endif %}
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
   <div class="shell">
   <div class="topbar">
     {% if not current_user.is_authenticated %}
@@ -59,6 +60,7 @@
     </a>
     {% endif %}
     {% if current_user.is_authenticated %}
+    <button class="nav-drawer-toggle" id="nav-drawer-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Menu</button>
     <div class="topbar-actions">
       <span class="user-chip">{{ current_user.username }} · {{ current_user.role_label }}</span>
       <form method="POST" action="{{ url_for('logout') }}" class="logout-form">
@@ -97,6 +99,30 @@
     </div>
   </div>
   <script src="{{ url_for('static', filename='js/ui-core.js') }}?v={{ _lt }}" defer></script>
+  <script>
+    (function () {
+      var btn = document.getElementById("nav-drawer-toggle");
+      var side = document.getElementById("sidebar");
+      var backdrop = document.getElementById("sidebar-backdrop");
+      if (!btn || !side) return;
+      function setOpen(open) {
+        document.documentElement.classList.toggle("side-open", open);
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        btn.setAttribute("aria-label", open ? "Fechar menu" : "Abrir menu");
+      }
+      btn.addEventListener("click", function (event) {
+        event.stopPropagation();
+        setOpen(!document.documentElement.classList.contains("side-open"));
+      });
+      if (backdrop) backdrop.addEventListener("click", function () { setOpen(false); });
+      side.addEventListener("click", function (event) {
+        if (event.target.closest("[data-tab]")) setOpen(false);
+      });
+      window.addEventListener("resize", function () {
+        if (window.innerWidth > 720) setOpen(false);
+      });
+    })();
+  </script>
   <script>
     (function () {
       var meta = document.querySelector('meta[name="csrf-token"]');
