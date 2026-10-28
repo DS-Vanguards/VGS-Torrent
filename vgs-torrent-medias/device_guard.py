@@ -52,6 +52,29 @@ def _attach_cookie(response, token: str):
     return response
 
 
+def ensure_machine() -> DeviceBlock:
+    token = (request.cookies.get(COOKIE_NAME) or "").strip()
+    ip = client_ip()
+    device = DeviceBlock.query.filter_by(token=token).first() if token else None
+    if not device:
+        device = DeviceBlock(token=token or _new_token(), ip=ip or "", attempt_count=0, strike_level=0)
+        db.session.add(device)
+        db.session.commit()
+        return device
+    if ip and device.ip != ip:
+        device.ip = ip
+        device.updated_at = datetime.utcnow()
+        db.session.commit()
+    return device
+
+
+def attach_machine_cookie(response, token: str):
+    current = (request.cookies.get(COOKIE_NAME) or "").strip()
+    if not token or current == token:
+        return response
+    return _attach_cookie(response, token)
+
+
 def identify_device(persist: bool = True) -> DeviceBlock:
     token = (request.cookies.get(COOKIE_NAME) or "").strip()
     ip = client_ip()

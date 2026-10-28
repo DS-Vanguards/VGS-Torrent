@@ -13,6 +13,7 @@
     dividers: [],
     seenIp: VGS.seenIp || "",
     access: null,
+    userWatch: 0,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -177,16 +178,29 @@
     renderItems();
   }
 
+  function watchUsers(active) {
+    if (state.userWatch) {
+      clearInterval(state.userWatch);
+      state.userWatch = 0;
+    }
+    if (!active) return;
+    state.userWatch = setInterval(() => {
+      if (state.tab === "admin" && $("users-body")) loadUsers().catch(() => {});
+    }, 20000);
+  }
+
   function showLibrary() {
     $("view-library").classList.add("active");
     const admin = $("view-admin");
     if (admin) admin.classList.remove("active");
+    watchUsers(false);
   }
 
   function showAdmin() {
     $("view-library").classList.remove("active");
     const admin = $("view-admin");
     if (admin) admin.classList.add("active");
+    watchUsers(true);
   }
 
   function fillSectionSelect(selected) {
@@ -333,6 +347,29 @@
       .join("");
   }
 
+  function syncBlockMode() {
+    const serial = $("manual-mode") && $("manual-mode").value === "serial";
+    const ipWrap = $("manual-ip-wrap");
+    const serialWrap = $("manual-serial-wrap");
+    if (ipWrap) ipWrap.hidden = !!serial;
+    if (serialWrap) serialWrap.hidden = !serial;
+    if ($("manual-ip")) $("manual-ip").required = !serial;
+    if ($("manual-serial")) $("manual-serial").required = !!serial;
+  }
+
+  function openManualBlock(preset) {
+    const form = $("manual-block-form");
+    if (form) form.reset();
+    const mode = (preset && preset.mode) || "ip";
+    if ($("manual-mode")) $("manual-mode").value = mode;
+    if ($("manual-ip")) $("manual-ip").value = (preset && preset.ip) || (mode === "ip" ? state.seenIp || "" : "");
+    if ($("manual-serial")) $("manual-serial").value = (preset && preset.serial) || "";
+    const time = $("manual-time-wrap");
+    if (time) time.hidden = false;
+    syncBlockMode();
+    openModal("manual-block-modal");
+  }
+
   async function loadUsers() {
     const data = await request("/api/usuarios");
     const body = $("users-body");
@@ -340,7 +377,7 @@
     state.users = data.usuarios || [];
     state.assignableRoles = data.assignable_roles || [];
     if (!state.users.length) {
-      body.innerHTML = `<tr><td colspan="4" class="empty">Nenhum usuário.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="5" class="empty">Nenhum usuário.</td></tr>`;
       return;
     }
     body.innerHTML = state.users
@@ -359,10 +396,24 @@
         const delBtn = user.can_manage
           ? `<button class="btn-sm btn-danger" data-del-user="${user.id}" type="button">Excluir conta</button>`
           : "";
+        const ip = user.last_ip || "";
+        const serial = user.machine_serial || "";
+        const blockIp = ip
+          ? `<button class="btn-sm btn-danger" type="button" data-block-ip="${escapeHtml(ip)}">Bloquear IP</button>`
+          : "";
+        const blockSerial = serial
+          ? `<button class="btn-sm btn-danger" type="button" data-block-serial="${escapeHtml(serial)}">Bloquear serial</button>`
+          : "";
+        const device = `<div class="device-cell">
+            <span>${escapeHtml(ip || "—")}</span>
+            <span class="text-muted" title="${escapeHtml(serial)}">${escapeHtml(serial ? serial.slice(0, 16) : "sem serial")}</span>
+            <div class="actions-stack">${blockIp}${blockSerial}</div>
+          </div>`;
         return `<tr>
           <td><strong>${escapeHtml(user.username)}</strong> ${pending}</td>
           <td>${escapeHtml(user.email)}</td>
           <td><div class="cargo-cell">${cargo}</div></td>
+          <td>${device}</td>
           <td><div class="actions-stack">${resetBtn}${delBtn}</div></td>
         </tr>`;
       })
@@ -421,7 +472,7 @@
       .map(
         (row) => `<tr>
           <td style="font-family:var(--mono);font-size:11px">${escapeHtml(row.token)}</td>
-          <td>${escapeHtml(row.ip)}</td>
+          <td>${row.match_serial ? `<span title="${escapeHtml(row.serial)}">Serial ${escapeHtml((row.serial || "").slice(0, 12))}</span>` : escapeHtml(row.ip)}</td>
           <td><span class="badge ${row.manual || row.strike_level >= 6 ? "badge-danger" : "badge-yellow"}">${escapeHtml(row.level_label)}</span></td>
           <td>${escapeHtml(row.blocked_until)}</td>
           <td>
@@ -585,12 +636,17 @@
       return;
     }
     if (event.target.closest("#btn-add-block")) {
-      const form = $("manual-block-form");
-      if (form) form.reset();
-      const time = $("manual-time-wrap");
-      if (time) time.hidden = false;
-      if ($("manual-ip") && state.seenIp) $("manual-ip").value = state.seenIp;
-      openModal("manual-block-modal");
+      openManualBlock({ mode: "ip", ip: state.seenIp || "" });
+      return;
+    }
+    const blockIp = event.target.closest("[data-block-ip]");
+    if (blockIp) {
+      openManualBlock({ mode: "ip", ip: blockIp.dataset.blockIp || "" });
+      return;
+    }
+    const blockSerial = event.target.closest("[data-block-serial]");
+    if (blockSerial) {
+      openManualBlock({ mode: "serial", serial: blockSerial.dataset.blockSerial || "" });
       return;
     }
     if (event.target.closest("#btn-add-divider")) {
@@ -782,10 +838,13 @@
       event.preventDefault();
       const permanent = $("manual-permanent").checked;
       try {
+        const mode = $("manual-mode") ? $("manual-mode").value : "ip";
         await request("/api/bloqueios", {
           method: "POST",
           body: JSON.stringify({
-            ip: $("manual-ip").value.trim(),
+            mode,
+            ip: mode === "ip" ? $("manual-ip").value.trim() : "",
+            serial: mode === "serial" ? $("manual-serial").value.trim() : "",
             permanent,
             amount: permanent ? null : $("manual-amount").value,
             unit: $("manual-unit").value,
@@ -847,6 +906,7 @@
       return;
     }
     if (event.target.id === "access-role") renderAccessChecks();
+    if (event.target.id === "manual-mode") syncBlockMode();
   });
 
   const collapse = $("sidebar-collapse");

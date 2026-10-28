@@ -688,6 +688,8 @@ textarea.form-input { min-height: 96px; resize: vertical; }
   margin: 8px 0;
 }
 .check-row input { accent-color: var(--aqua); }
+.device-cell { font-family: var(--mono); font-size: 11px; line-height: 1.45; }
+.device-cell .text-muted { display: block; word-break: break-all; }
 
 @media (max-width: 860px) {
   :root { --page-gutter: 14px; }

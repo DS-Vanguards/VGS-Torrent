@@ -68,7 +68,7 @@
       <div class="section-title" style="margin:0;padding:0;border:none">Usuários e cargos</div>
       <button class="save-btn" id="btn-add-user" type="button">+ ADICIONAR USUÁRIO</button>
     </div>
-    <p class="admin-hint">O cargo que você pode atribuir depende do seu nível: <strong>Admin</strong> só altera cargos abaixo; <strong>VGS-Owner's</strong> define qualquer cargo, inclusive outro VGS-Owner's. A conta padrão do primeiro login não pode ter o cargo trocado nem ser excluída. Só um VGS-Owner's redefine a senha dela. O cadastro pelo painel aceita qualquer e-mail.</p>
+    <p class="admin-hint">O cargo que você pode atribuir depende do seu nível: <strong>Admin</strong> só altera cargos abaixo; <strong>VGS-Owner's</strong> define qualquer cargo, inclusive outro VGS-Owner's. A conta padrão do primeiro login não pode ter o cargo trocado nem ser excluída. Só um VGS-Owner's redefine a senha dela. O cadastro pelo painel aceita qualquer e-mail. O IP muda a cada visita. O serial é o identificador que este site grava no navegador; o número de série de fábrica não fica disponível.</p>
     <div class="table-wrap admin-table-wrap">
       <table class="resumo-table">
         <thead>
@@ -76,6 +76,7 @@
             <th>Usuário</th>
             <th>E-mail</th>
             <th>Cargo</th>
+            <th>IP / Serial</th>
             <th>Ações</th>
           </tr>
         </thead>
@@ -87,13 +88,13 @@
       <div class="section-title" style="margin:0;padding:0;border:none">Máquinas bloqueadas</div>
       <button class="save-btn" id="btn-add-block" type="button">+ BLOQUEAR MÁQUINA</button>
     </div>
-    <p class="admin-hint">O bloqueio manual usa o IP que <strong>este site</strong> recebe. Nesta visita esse IP é <strong id="seen-ip">{{ seen_ip or "—" }}</strong>. No mesmo computador, bloqueie esse valor (aqui costuma ser 127.0.0.1), não o IP público da internet. Em outra máquina, use o IP que aparece para ela ao abrir este site.</p>
+    <p class="admin-hint">Dá para bloquear pelo IP ou pelo serial do navegador. O IP desta visita é <strong id="seen-ip">{{ seen_ip or "—" }}</strong>. Bloquear o IP trava esse endereço. Bloquear o serial trava aquele navegador mesmo se o IP mudar. O serial aparece na lista de usuários depois que a pessoa abre o site.</p>
     <div class="table-wrap admin-table-wrap">
       <table class="resumo-table">
         <thead>
           <tr>
             <th>Token</th>
-            <th>IP</th>
+            <th>Alvo</th>
             <th>Nível</th>
             <th>Até</th>
             <th>Ações</th>
@@ -325,8 +326,19 @@
       <button class="modal-close-btn" type="button" data-close="manual-block-modal">✕</button>
     </div>
     <form class="modal-body" id="manual-block-form">
-      <label for="manual-ip">IP</label>
-      <input class="form-input" id="manual-ip" required maxlength="64" placeholder="Ex: 187.10.20.30">
+      <label for="manual-mode">Bloquear por</label>
+      <select class="form-input" id="manual-mode">
+        <option value="ip">IP</option>
+        <option value="serial">Serial do navegador</option>
+      </select>
+      <div id="manual-ip-wrap">
+        <label for="manual-ip">IP</label>
+        <input class="form-input" id="manual-ip" maxlength="64" placeholder="Ex: 187.10.20.30">
+      </div>
+      <div id="manual-serial-wrap" hidden>
+        <label for="manual-serial">Serial</label>
+        <input class="form-input" id="manual-serial" maxlength="64" placeholder="Cole o serial da lista de usuários" autocomplete="off">
+      </div>
       <label class="check-row" for="manual-permanent">
         <input type="checkbox" id="manual-permanent">
         <span>Bloqueio permanente, até remover</span>
@@ -368,5 +380,5 @@
     seenIp: {{ seen_ip | tojson }}
   };
 </script>
-<script src="{{ url_for('static', filename='js/app.js') }}?v=6" defer></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=7" defer></script>
 {% endblock %}

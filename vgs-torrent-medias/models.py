@@ -20,6 +20,8 @@ class User(UserMixin, db.Model):
     must_reset_password = db.Column(db.Boolean, default=False, nullable=False)
     session_version = db.Column(db.Integer, default=0, nullable=False)
     is_primary = db.Column(db.Boolean, default=False, nullable=False)
+    last_ip = db.Column(db.String(64), default="", nullable=False)
+    machine_serial = db.Column(db.String(64), default="", nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def get_id(self):
@@ -69,6 +71,7 @@ class DeviceBlock(db.Model):
     attempt_count = db.Column(db.Integer, default=0, nullable=False)
     strike_level = db.Column(db.Integer, default=0, nullable=False)
     manual = db.Column(db.Boolean, default=False, nullable=False)
+    match_serial = db.Column(db.Boolean, default=False, nullable=False)
     blocked_until = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -92,7 +95,11 @@ class DeviceBlock(db.Model):
             "strike_level": self.strike_level,
             "blocked_until": until_label,
             "manual": bool(self.manual),
-            "level_label": "Manual" if self.manual else ("1 dia" if self.strike_level >= 6 else "5 min"),
+            "match_serial": bool(self.match_serial),
+            "serial": self.token if self.match_serial else "",
+            "level_label": (
+                "Serial" if self.match_serial else "IP" if self.manual else ("1 dia" if self.strike_level >= 6 else "5 min")
+            ),
         }
 
 
@@ -245,7 +252,10 @@ def ensure_schema() -> None:
         )
         db.session.commit()
     _add_column("users", "is_primary", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
+    _add_column("users", "last_ip", "VARCHAR(64) NOT NULL DEFAULT ''")
+    _add_column("users", "machine_serial", "VARCHAR(64) NOT NULL DEFAULT ''")
     _add_column("device_blocks", "manual", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
+    _add_column("device_blocks", "match_serial", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
     mark_primary_user()
 
 

@@ -3,7 +3,7 @@ import re
 from functools import wraps
 from urllib.parse import urlparse
 
-from flask import Flask, flash, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import Flask, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_wtf.csrf import CSRFError, CSRFProtect, generate_csrf
 from sqlalchemy import event, func
@@ -13,7 +13,10 @@ from sqlalchemy.exc import IntegrityError
 import config
 from core.layout_sig import bind as _layout_bind
 from device_guard import (
+    COOKIE_NAME,
+    attach_machine_cookie,
     blocked_page_context,
+    ensure_machine,
     identify_device,
     parse_block_duration,
     refresh_block_state,
@@ -254,6 +257,9 @@ def inject_globals():
 @app.after_request
 def set_security_headers(response):
     response = add_security_headers(response)
+    token = getattr(g, "machine_token", "")
+    if token:
+        response = attach_machine_cookie(response, token)
     if request.path.startswith("/static/"):
         response.headers["Cache-Control"] = "public, max-age=120, stale-while-revalidate=86400"
     return response
@@ -323,7 +329,8 @@ def manual_block_for_request():
     from datetime import datetime
 
     ips = {ip for ip in request_ips() if ip}
-    if not ips:
+    cookie = (request.cookies.get(COOKIE_NAME) or "").strip().lower()
+    if not ips and not cookie:
         return None
     now = datetime.utcnow()
     rows = (
@@ -336,9 +343,33 @@ def manual_block_for_request():
         .all()
     )
     for row in rows:
+        if row.match_serial:
+            if cookie and cookie == (row.token or "").lower():
+                return row
+            continue
         if normalize_ip(row.ip) in ips:
             return row
     return None
+
+
+@app.before_request
+def remember_user_device():
+    if request.endpoint in (None, "static", "favicon"):
+        return
+    if not getattr(current_user, "is_authenticated", False):
+        return
+    device = ensure_machine()
+    g.machine_token = device.token
+    ip = client_ip()
+    changed = False
+    if ip and current_user.last_ip != ip:
+        current_user.last_ip = ip
+        changed = True
+    if device.token and current_user.machine_serial != device.token:
+        current_user.machine_serial = device.token
+        changed = True
+    if changed:
+        db.session.commit()
 
 
 @app.before_request
@@ -741,6 +772,8 @@ def api_list_users():
                 "is_self": user.id == current_user.id,
                 "is_primary": bool(user.is_primary),
                 "must_reset_password": bool(user.must_reset_password),
+                "last_ip": user.last_ip or "",
+                "machine_serial": user.machine_serial or "",
                 "can_edit_role": (
                     not user.is_primary
                     and user.id != current_user.id
@@ -915,6 +948,24 @@ def clean_block_ip(value: str):
     return normalize_ip(value) or None
 
 
+def clean_serial(value: str):
+    text = (value or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{16,64}", text):
+        return None
+    return text
+
+
+def block_until_from(data: dict):
+    from datetime import datetime
+
+    if bool(data.get("permanent")):
+        return datetime(2099, 1, 1), None
+    delta = parse_block_duration(data.get("amount"), data.get("unit"))
+    if not delta:
+        return None, "Informe o tempo do bloqueio ou marque permanente."
+    return datetime.utcnow() + delta, None
+
+
 @app.route("/api/meu-ip")
 @staff_required
 def api_seen_ip():
@@ -928,26 +979,35 @@ def api_create_block():
     from datetime import datetime
 
     data = request.get_json(silent=True) or {}
-    ip = clean_block_ip(data.get("ip") or "")
-    if not ip:
-        return jsonify({"erro": "Informe o IP da máquina."}), 400
-    permanent = bool(data.get("permanent"))
-    if permanent:
-        until = datetime(2099, 1, 1)
+    until, error = block_until_from(data)
+    if error:
+        return jsonify({"erro": error}), 400
+    mode = (data.get("mode") or "ip").strip()
+    if mode == "serial":
+        serial = clean_serial(data.get("serial") or "")
+        if not serial:
+            return jsonify({"erro": "Informe o serial do navegador."}), 400
+        row = DeviceBlock.query.filter_by(token=serial).first()
+        if row is None:
+            return jsonify({"erro": "Esse serial ainda não apareceu. A pessoa precisa abrir o site nesse navegador."}), 400
+        row.manual = True
+        row.match_serial = True
+        row.blocked_until = until
+        row.updated_at = datetime.utcnow()
     else:
-        delta = parse_block_duration(data.get("amount"), data.get("unit"))
-        if not delta:
-            return jsonify({"erro": "Informe o tempo do bloqueio ou marque permanente."}), 400
-        until = datetime.utcnow() + delta
-    row = DeviceBlock(
-        token=os.urandom(24).hex(),
-        ip=ip,
-        manual=True,
-        attempt_count=0,
-        strike_level=0,
-        blocked_until=until,
-    )
-    db.session.add(row)
+        ip = clean_block_ip(data.get("ip") or "")
+        if not ip:
+            return jsonify({"erro": "Informe o IP da máquina."}), 400
+        row = DeviceBlock(
+            token=os.urandom(24).hex(),
+            ip=ip,
+            manual=True,
+            match_serial=False,
+            attempt_count=0,
+            strike_level=0,
+            blocked_until=until,
+        )
+        db.session.add(row)
     db.session.commit()
     return jsonify({"ok": True, "bloqueio": row.to_dict()}), 201
 
