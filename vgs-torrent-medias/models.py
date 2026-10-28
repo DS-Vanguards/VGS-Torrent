@@ -19,6 +19,7 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(32), default="visitante", nullable=False)
     must_reset_password = db.Column(db.Boolean, default=False, nullable=False)
     session_version = db.Column(db.Integer, default=0, nullable=False)
+    is_primary = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def get_id(self):
@@ -67,6 +68,7 @@ class DeviceBlock(db.Model):
     ip = db.Column(db.String(64), default="", nullable=False, index=True)
     attempt_count = db.Column(db.Integer, default=0, nullable=False)
     strike_level = db.Column(db.Integer, default=0, nullable=False)
+    manual = db.Column(db.Boolean, default=False, nullable=False)
     blocked_until = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -76,14 +78,21 @@ class DeviceBlock(db.Model):
 
     def to_dict(self) -> dict:
         until = self.blocked_until
+        if until and self.manual and until.year >= 2090:
+            until_label = "Permanente"
+        elif until:
+            until_label = until.strftime("%d/%m/%Y %H:%M")
+        else:
+            until_label = ""
         return {
             "id": self.id,
             "token": self.token[:12],
             "ip": self.ip or "—",
             "attempt_count": self.attempt_count,
             "strike_level": self.strike_level,
-            "blocked_until": until.strftime("%d/%m/%Y %H:%M") if until else "",
-            "level_label": "1 dia" if self.strike_level >= 6 else "5 min",
+            "blocked_until": until_label,
+            "manual": bool(self.manual),
+            "level_label": "Manual" if self.manual else ("1 dia" if self.strike_level >= 6 else "5 min"),
         }
 
 
@@ -119,6 +128,30 @@ class Section(db.Model):
             "sort_order": self.sort_order,
             "item_count": item_count,
         }
+
+
+class RoleSection(db.Model):
+    __tablename__ = "role_sections"
+
+    id = db.Column(db.Integer, primary_key=True)
+    role = db.Column(db.String(32), nullable=False, index=True)
+    section_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("role", "section_id", name="uq_role_section"),
+    )
+
+
+class AppMeta(db.Model):
+    __tablename__ = "app_meta"
+
+    key = db.Column(db.String(40), primary_key=True)
+    value = db.Column(db.String(80), nullable=False, default="")
 
 
 class LibraryItem(db.Model):
@@ -166,6 +199,21 @@ class LibraryItem(db.Model):
         }
 
 
+def _bool_default() -> str:
+    return "0" if db.engine.dialect.name == "sqlite" else "FALSE"
+
+
+def _add_column(table: str, name: str, ddl: str) -> None:
+    inspector = inspect(db.engine)
+    if table not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns(table)}
+    if name in columns:
+        return
+    db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+    db.session.commit()
+
+
 def ensure_schema() -> None:
     inspector = inspect(db.engine)
     if "users" not in inspector.get_table_names():
@@ -181,6 +229,41 @@ def ensure_schema() -> None:
             text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
         )
         db.session.commit()
+    _add_column("users", "is_primary", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
+    _add_column("device_blocks", "manual", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
+    mark_primary_user()
+
+
+def mark_primary_user() -> None:
+    if User.query.filter_by(is_primary=True).first():
+        return
+    user = User.query.filter(
+        (User.username == config.ADMIN_USERNAME) | (User.email == config.ADMIN_EMAIL)
+    ).first()
+    if user is None:
+        user = User.query.order_by(User.id.asc()).first()
+    if user is None:
+        return
+    user.is_primary = True
+    db.session.commit()
+
+
+def seed_role_channels() -> None:
+    if AppMeta.query.filter_by(key="channels_seeded").first():
+        return
+    sections = Section.query.all()
+    if not sections:
+        return
+    for section in sections:
+        for role in config.CONFIGURABLE_ROLES:
+            if section.tier not in config.tiers_for(role):
+                continue
+            exists = RoleSection.query.filter_by(role=role, section_id=section.id).first()
+            if exists:
+                continue
+            db.session.add(RoleSection(role=role, section_id=section.id))
+    db.session.add(AppMeta(key="channels_seeded", value="1"))
+    db.session.commit()
 
 
 def init_default_data() -> None:
@@ -192,16 +275,22 @@ def init_default_data() -> None:
         if not has_owner:
             if bootstrap:
                 bootstrap.role = "vgs_owner"
+                if not User.query.filter_by(is_primary=True).first():
+                    bootstrap.is_primary = True
                 db.session.commit()
             elif config.ADMIN_PASSWORD:
                 owner = User(
                     username=config.ADMIN_USERNAME,
                     email=config.ADMIN_EMAIL,
                     role="vgs_owner",
+                    is_primary=True,
                 )
                 owner.set_password(config.ADMIN_PASSWORD)
                 db.session.add(owner)
                 db.session.commit()
+        elif bootstrap and not User.query.filter_by(is_primary=True).first():
+            bootstrap.is_primary = True
+            db.session.commit()
         if Section.query.first() is None:
             for slug, title, icon, tier, description, order in _STARTER_SECTIONS:
                 db.session.add(
@@ -215,6 +304,7 @@ def init_default_data() -> None:
                     )
                 )
             db.session.commit()
+        seed_role_channels()
     except IntegrityError:
         db.session.rollback()
     except Exception:

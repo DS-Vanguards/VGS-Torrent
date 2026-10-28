@@ -77,19 +77,6 @@
     nav.innerHTML = buttons + admin;
   }
 
-  function renderSummary() {
-    const grid = $("summary-grid");
-    if (!grid) return;
-    const totalItems = state.sections.reduce((sum, section) => sum + (Number(section.item_count) || 0), 0);
-    const chip = document.querySelector(".user-chip");
-    const cargo = chip ? chip.textContent.split("·").pop().trim() : "";
-    grid.innerHTML = `
-      <div class="stat-item"><span class="stat-label">Abas</span><span class="stat-val green">${state.sections.length}</span></div>
-      <div class="stat-item"><span class="stat-label">Itens nesta visão</span><span class="stat-val">${totalItems}</span></div>
-      <div class="stat-item"><span class="stat-label">Cargo</span><span class="stat-val cargo">${escapeHtml(cargo)}</span></div>
-    `;
-  }
-
   function renderItems() {
     const grid = $("item-grid");
     const section = state.sections.find((row) => String(row.id) === String(state.tab));
@@ -142,7 +129,6 @@
       state.tab = state.sections.length ? String(state.sections[0].id) : (VGS.isAdmin ? "admin" : "");
     }
     renderNav();
-    renderSummary();
     if (state.tab === "admin") {
       showAdmin();
     } else {
@@ -320,8 +306,10 @@
     body.innerHTML = state.users
       .map((user) => {
         const pending = user.must_reset_password ? `<span class="badge badge-yellow">Aguardando senha</span>` : "";
+        const primary = user.is_primary ? `<span class="text-muted">Conta padrão</span>` : "";
         let cargo = `<span class="badge badge-${escapeHtml(user.role)}">${escapeHtml(roleLabel(user.role))}</span>`;
-        if (user.is_self) cargo += `<span class="text-muted">Sua conta</span>`;
+        if (user.is_primary) cargo += primary;
+        else if (user.is_self) cargo += `<span class="text-muted">Sua conta</span>`;
         else if (user.can_edit_role) {
           cargo += `<button class="btn-sm btn-save-role" data-edit-role="${user.id}" type="button">Alterar cargo</button>`;
         }
@@ -388,7 +376,7 @@
         (row) => `<tr>
           <td style="font-family:var(--mono);font-size:11px">${escapeHtml(row.token)}</td>
           <td>${escapeHtml(row.ip)}</td>
-          <td><span class="badge ${row.strike_level >= 6 ? "badge-danger" : "badge-yellow"}">${escapeHtml(row.level_label)}</span></td>
+          <td><span class="badge ${row.manual || row.strike_level >= 6 ? "badge-danger" : "badge-yellow"}">${escapeHtml(row.level_label)}</span></td>
           <td>${escapeHtml(row.blocked_until)}</td>
           <td>
             <div class="actions-stack">
@@ -401,8 +389,56 @@
       .join("");
   }
 
+  function renderAccess(data) {
+    const panel = $("access-panel");
+    if (!panel) return;
+    const sections = data.secoes || [];
+    const roles = data.cargos || [];
+    if (!roles.length) {
+      panel.innerHTML = `<p class="admin-hint">Nenhum cargo configurável.</p>`;
+      return;
+    }
+    panel.innerHTML = roles
+      .map((role) => {
+        const selected = new Set((role.section_ids || []).map(String));
+        const boxes = sections.length
+          ? sections
+              .map(
+                (section) => `<label class="check-row">
+                  <input type="checkbox" data-access-role="${escapeHtml(role.role)}" data-access-section="${section.id}"${selected.has(String(section.id)) ? " checked" : ""}>
+                  <span>${escapeHtml(section.icon)} ${escapeHtml(section.title)}</span>
+                </label>`
+              )
+              .join("")
+          : `<span class="text-muted">Nenhuma aba criada.</span>`;
+        return `<section class="access-card" data-role-card="${escapeHtml(role.role)}">
+          <h3>${escapeHtml(role.label)}</h3>
+          <div class="access-grid">${boxes}</div>
+        </section>`;
+      })
+      .join("");
+  }
+
+  async function loadAccess() {
+    if (!$("access-panel")) return;
+    const data = await request("/api/acessos");
+    renderAccess(data);
+  }
+
+  async function saveAccess(role) {
+    const boxes = [...document.querySelectorAll("[data-access-role]")].filter(
+      (box) => box.dataset.accessRole === role
+    );
+    const sectionIds = boxes.filter((box) => box.checked).map((box) => Number(box.dataset.accessSection));
+    await request("/api/acessos", {
+      method: "PUT",
+      body: JSON.stringify({ role, section_ids: sectionIds }),
+    });
+  }
+
   async function loadAdminTables() {
     renderSections();
+    await loadAccess();
     await loadUsers();
     await loadBlocks();
   }
@@ -428,6 +464,10 @@
         }
       }
       $("main-nav").classList.remove("is-open");
+      const sidebar = $("sidebar");
+      if (sidebar) sidebar.classList.remove("is-open");
+      const drawerBtn = $("nav-drawer-toggle");
+      if (drawerBtn) drawerBtn.setAttribute("aria-expanded", "false");
       return;
     }
 
@@ -454,6 +494,14 @@
     }
     if (event.target.closest("#btn-add-section")) {
       openSectionModal(null);
+      return;
+    }
+    if (event.target.closest("#btn-add-block")) {
+      const form = $("manual-block-form");
+      if (form) form.reset();
+      const time = $("manual-time-wrap");
+      if (time) time.hidden = false;
+      openModal("manual-block-modal");
       return;
     }
     if (event.target.closest("#btn-add-user")) {
@@ -608,17 +656,55 @@
       } catch (err) {
         showToast("✘ " + err.message);
       }
+      return;
+    }
+    if (event.target.id === "manual-block-form") {
+      event.preventDefault();
+      const permanent = $("manual-permanent").checked;
+      try {
+        await request("/api/bloqueios", {
+          method: "POST",
+          body: JSON.stringify({
+            ip: $("manual-ip").value.trim(),
+            permanent,
+            amount: permanent ? null : $("manual-amount").value,
+            unit: $("manual-unit").value,
+          }),
+        });
+        showToast("✔ Máquina bloqueada");
+        closeModal("manual-block-modal");
+        await loadBlocks();
+      } catch (err) {
+        showToast("✘ " + err.message);
+      }
     }
   });
 
   const kind = $("item-kind");
   if (kind) kind.addEventListener("change", syncTutorialFields);
 
+  document.addEventListener("change", async (event) => {
+    if (event.target.id === "manual-permanent") {
+      const time = $("manual-time-wrap");
+      if (time) time.hidden = event.target.checked;
+      return;
+    }
+    const box = event.target.closest("[data-access-role]");
+    if (!box) return;
+    try {
+      await saveAccess(box.dataset.accessRole);
+      showToast("✔ Canais atualizados");
+    } catch (err) {
+      showToast("✘ " + err.message);
+      loadAccess().catch(() => {});
+    }
+  });
+
   const drawer = $("nav-drawer-toggle");
   if (drawer) {
     drawer.addEventListener("click", () => {
-      const nav = $("main-nav");
-      const open = nav.classList.toggle("is-open");
+      const sidebar = $("sidebar");
+      const open = sidebar ? sidebar.classList.toggle("is-open") : false;
       drawer.setAttribute("aria-expanded", open ? "true" : "false");
     });
   }

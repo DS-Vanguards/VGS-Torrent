@@ -1,12 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Acervo — VGS-Torrent{% endblock %}
 {% block nav %}
-<button class="nav-drawer-toggle" id="nav-drawer-toggle" type="button" aria-controls="main-nav" aria-expanded="false">Abas</button>
 <nav class="nav-tabs" id="main-nav" aria-label="Abas do acervo"></nav>
 {% endblock %}
 {% block content %}
 <div id="view-library" class="view active">
-  <div class="stats-bar" id="summary-grid"></div>
   <div class="day-header">
     <div>
       <span class="day-title" id="tab-label">ACERVO</span>
@@ -26,13 +24,13 @@
       <div class="section-title" style="margin:0;padding:0;border:none">Abas do acervo</div>
       <button class="save-btn" id="btn-add-section" type="button">+ NOVA ABA</button>
     </div>
-    <p class="admin-hint">Crie e edite as abas aqui. O acesso define quem vê a aba: Visitante vê o básico; VIP, Mega VIP e Super VIP sobem nessa ordem; VGS-Client vê o escolar; VGS-Pro Client vê o escolar e o Pro.</p>
+    <p class="admin-hint">Crie e edite as abas aqui. Quem vê cada aba é definido em <strong>Canais por cargo</strong>. Admin e VGS-Owner's continuam vendo todas.</p>
     <div class="table-wrap admin-table-wrap">
       <table class="resumo-table">
         <thead>
           <tr>
             <th>Aba</th>
-            <th>Acesso</th>
+            <th>Marcação</th>
             <th>Itens</th>
             <th>Ordem</th>
             <th>Ações</th>
@@ -42,11 +40,15 @@
       </table>
     </div>
 
+    <div class="section-title" style="margin-top:28px">Canais por cargo</div>
+    <p class="admin-hint">Marque as abas de cada cargo. <strong>Admin</strong> e <strong>VGS-Owner's</strong> ficam de fora e mantêm o acesso total. Uma aba nova só aparece para os cargos marcados.</p>
+    <div id="access-panel"></div>
+
     <div class="admin-users-head" style="margin-top:28px">
       <div class="section-title" style="margin:0;padding:0;border:none">Usuários e cargos</div>
       <button class="save-btn" id="btn-add-user" type="button">+ ADICIONAR USUÁRIO</button>
     </div>
-    <p class="admin-hint">O cargo que você pode atribuir depende do seu nível: <strong>Admin</strong> só altera cargos abaixo; <strong>VGS-Owner's</strong> define qualquer cargo, inclusive outro VGS-Owner's. O cadastro pelo painel aceita qualquer e-mail.</p>
+    <p class="admin-hint">O cargo que você pode atribuir depende do seu nível: <strong>Admin</strong> só altera cargos abaixo; <strong>VGS-Owner's</strong> define qualquer cargo, inclusive outro VGS-Owner's. A conta padrão do primeiro login não pode ter o cargo trocado nem ser excluída. Só um VGS-Owner's redefine a senha dela. O cadastro pelo painel aceita qualquer e-mail.</p>
     <div class="table-wrap admin-table-wrap">
       <table class="resumo-table">
         <thead>
@@ -61,8 +63,11 @@
       </table>
     </div>
 
-    <div class="section-title" style="margin-top:28px">Máquinas bloqueadas</div>
-    <p class="admin-hint">Bloqueios da proteção DS-Vanguards. Use <strong>Alterar bloqueio</strong> para definir quanto falta ou <strong>Remover bloqueio</strong> para liberar a máquina.</p>
+    <div class="admin-users-head" style="margin-top:28px">
+      <div class="section-title" style="margin:0;padding:0;border:none">Máquinas bloqueadas</div>
+      <button class="save-btn" id="btn-add-block" type="button">+ BLOQUEAR MÁQUINA</button>
+    </div>
+    <p class="admin-hint">Bloqueios da proteção DS-Vanguards. O bloqueio manual cobre o site com a tela de acesso negado. Use <strong>Alterar bloqueio</strong> para definir quanto falta ou <strong>Remover bloqueio</strong> para liberar a máquina.</p>
     <div class="table-wrap admin-table-wrap">
       <table class="resumo-table">
         <thead>
@@ -152,7 +157,7 @@
       <input class="form-input" id="section-title" maxlength="80" required>
       <label for="section-icon">Ícone</label>
       <input class="form-input" id="section-icon" maxlength="8" value="💾">
-      <label for="section-tier">Quem pode ver</label>
+      <label for="section-tier">Marcação</label>
       <select class="form-input" id="section-tier">
         {% for tier in TIERS %}
         <option value="{{ tier }}">{{ TIER_LABELS.get(tier, tier) }}</option>
@@ -242,6 +247,38 @@
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="manual-block-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Bloquear máquina</span>
+      <button class="modal-close-btn" type="button" data-close="manual-block-modal">✕</button>
+    </div>
+    <form class="modal-body" id="manual-block-form">
+      <label for="manual-ip">IP</label>
+      <input class="form-input" id="manual-ip" required maxlength="64" placeholder="Ex: 187.10.20.30">
+      <label class="check-row" for="manual-permanent">
+        <input type="checkbox" id="manual-permanent">
+        <span>Bloqueio permanente, até remover</span>
+      </label>
+      <div id="manual-time-wrap">
+        <label for="manual-amount">Número</label>
+        <input class="form-input" type="number" id="manual-amount" min="1" max="999" step="1" placeholder="Ex: 2">
+        <label for="manual-unit">Unidade</label>
+        <select class="form-input" id="manual-unit">
+          <option value="horas">Horas</option>
+          <option value="dias" selected>Dias</option>
+          <option value="semanas">Semanas</option>
+          <option value="meses">Meses</option>
+          <option value="anos">Anos</option>
+        </select>
+      </div>
+    </form>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="manual-block-modal">CANCELAR</button>
+      <button class="print-btn" type="submit" form="manual-block-form">BLOQUEAR</button>
+    </div>
+  </div>
+</div>
 {% endif %}
 {% endblock %}
 {% block scripts %}
@@ -258,5 +295,5 @@
     tierLabels: {{ TIER_LABELS | tojson }}
   };
 </script>
-<script src="{{ url_for('static', filename='js/app.js') }}?v=1" defer></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=2" defer></script>
 {% endblock %}

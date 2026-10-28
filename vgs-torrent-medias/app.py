@@ -27,11 +27,20 @@ from hardening import (
     add_security_headers,
     apply_proxy_fix,
     clear_password_reset,
+    client_ip,
     pending_reset_user_id,
     start_password_reset,
     too_many_requests,
 )
-from models import DeviceBlock, LibraryItem, Section, User, ensure_schema, init_default_data
+from models import (
+    DeviceBlock,
+    LibraryItem,
+    RoleSection,
+    Section,
+    User,
+    ensure_schema,
+    init_default_data,
+)
 
 app = Flask(__name__)
 app.config.from_object(config)
@@ -116,6 +125,13 @@ def last_vgs_owner(user) -> bool:
 
 
 def manage_user_error(target, *, action: str):
+    if getattr(target, "is_primary", False):
+        if action in ("excluir", "cargo"):
+            return "A conta padrão do site não pode ter o cargo alterado nem ser excluída."
+        if action == "senha" and not current_user.is_vgs_owner:
+            return "Só um VGS-Owner's pode redefinir a senha da conta padrão."
+        if action == "senha":
+            return None
     if target.id == current_user.id:
         if action == "excluir":
             return "Você não pode excluir a própria conta."
@@ -190,22 +206,30 @@ def parse_sort(value, default=0) -> int:
     return number
 
 
+def user_can_see_section(section: Section) -> bool:
+    if current_user.role in config.STAFF_ROLES:
+        return True
+    return (
+        RoleSection.query.filter_by(role=current_user.role, section_id=section.id).first()
+        is not None
+    )
+
+
 def visible_sections():
-    allowed = config.tiers_for(current_user.role)
     rows = Section.query.order_by(Section.sort_order.asc(), Section.title.asc()).all()
-    return [row for row in rows if row.tier in allowed]
+    if current_user.role in config.STAFF_ROLES:
+        return rows
+    return [row for row in rows if user_can_see_section(row)]
 
 
 def visible_items(section: Section):
-    allowed = config.tiers_for(current_user.role)
-    if section.tier not in allowed:
+    if not user_can_see_section(section):
         return []
-    items = (
+    return (
         LibraryItem.query.filter_by(section_id=section.id)
         .order_by(LibraryItem.sort_order.asc(), LibraryItem.id.asc())
         .all()
     )
-    return [item for item in items if item.effective_tier() in allowed]
 
 
 @app.context_processor
@@ -281,6 +305,34 @@ def login():
         return redirect(url_for("painel"))
 
     return render_template("login.html")
+
+
+@app.before_request
+def guard_manual_block():
+    if request.endpoint in (None, "static", "favicon"):
+        return
+    block = manual_block_for_request()
+    if block:
+        return render_template("bloqueio_manual.html")
+
+
+def manual_block_for_request():
+    from datetime import datetime
+
+    ip = client_ip()
+    if not ip:
+        return None
+    now = datetime.utcnow()
+    return (
+        DeviceBlock.query.filter(
+            DeviceBlock.manual.is_(True),
+            DeviceBlock.ip == ip,
+            DeviceBlock.blocked_until.isnot(None),
+            DeviceBlock.blocked_until > now,
+        )
+        .order_by(DeviceBlock.id.desc())
+        .first()
+    )
 
 
 @app.before_request
@@ -490,6 +542,7 @@ def api_delete_section(section_id):
     section = db.session.get(Section, section_id)
     if not section:
         return jsonify({"erro": "Aba não encontrada."}), 404
+    RoleSection.query.filter_by(section_id=section.id).delete(synchronize_session=False)
     db.session.delete(section)
     db.session.commit()
     return jsonify({"ok": True})
@@ -502,7 +555,7 @@ def api_list_items(section_id):
     if not section:
         return jsonify({"erro": "Aba não encontrada."}), 404
     staff = current_user.can_edit_library()
-    if not staff and section.tier not in config.tiers_for(current_user.role):
+    if not staff and not user_can_see_section(section):
         return jsonify({"erro": "Aba indisponível para o seu cargo."}), 403
     if staff:
         items = (
@@ -624,18 +677,27 @@ def api_list_users():
                 "email": user.email,
                 "role": user.role,
                 "is_self": user.id == current_user.id,
+                "is_primary": bool(user.is_primary),
                 "must_reset_password": bool(user.must_reset_password),
                 "can_edit_role": (
-                    user.id != current_user.id
+                    not user.is_primary
+                    and user.id != current_user.id
                     and config.can_manage_target(current_user.role, user.role)
                 ),
                 "can_manage": (
-                    user.id != current_user.id
+                    not user.is_primary
+                    and user.id != current_user.id
                     and config.can_manage_target(current_user.role, user.role)
                 ),
                 "can_reset": (
-                    user.id == current_user.id
-                    or config.can_manage_target(current_user.role, user.role)
+                    (bool(user.is_primary) and current_user.is_vgs_owner)
+                    or (
+                        not user.is_primary
+                        and (
+                            user.id == current_user.id
+                            or config.can_manage_target(current_user.role, user.role)
+                        )
+                    )
                 ),
             }
             for user in users
@@ -736,6 +798,94 @@ def api_delete_user(user_id):
     db.session.delete(user)
     db.session.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/acessos")
+@staff_required
+def api_list_access():
+    sections = Section.query.order_by(Section.sort_order.asc(), Section.title.asc()).all()
+    grants = RoleSection.query.all()
+    by_role = {}
+    for grant in grants:
+        by_role.setdefault(grant.role, []).append(grant.section_id)
+    return jsonify({
+        "secoes": [
+            {"id": section.id, "title": section.title, "icon": section.icon or "💾"}
+            for section in sections
+        ],
+        "cargos": [
+            {
+                "role": role,
+                "label": config.role_label(role),
+                "section_ids": by_role.get(role, []),
+            }
+            for role in config.CONFIGURABLE_ROLES
+        ],
+    })
+
+
+@app.route("/api/acessos", methods=["PUT"])
+@staff_required
+def api_save_access():
+    data = request.get_json(silent=True) or {}
+    role = (data.get("role") or "").strip()
+    if role not in config.CONFIGURABLE_ROLES:
+        return jsonify({"erro": "Este cargo não entra na seleção de canais."}), 400
+    raw_ids = data.get("section_ids") or []
+    wanted = set()
+    for value in raw_ids:
+        try:
+            wanted.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    valid = {
+        section_id
+        for (section_id,) in db.session.query(Section.id).filter(Section.id.in_(wanted or {0})).all()
+    } if wanted else set()
+    RoleSection.query.filter_by(role=role).delete(synchronize_session=False)
+    for section_id in sorted(valid):
+        db.session.add(RoleSection(role=role, section_id=section_id))
+    db.session.commit()
+    return jsonify({"ok": True, "section_ids": sorted(valid)})
+
+
+def clean_block_ip(value: str):
+    text = (value or "").strip()
+    if not text or len(text) > 64:
+        return None
+    if not re.match(r"^[0-9a-fA-F:.]+$", text):
+        return None
+    return text
+
+
+@app.route("/api/bloqueios", methods=["POST"])
+@staff_required
+def api_create_block():
+    from datetime import datetime
+
+    data = request.get_json(silent=True) or {}
+    ip = clean_block_ip(data.get("ip") or "")
+    if not ip:
+        return jsonify({"erro": "Informe o IP da máquina."}), 400
+    permanent = bool(data.get("permanent"))
+    if permanent:
+        until = datetime(2099, 1, 1)
+    else:
+        delta = parse_block_duration(data.get("amount"), data.get("unit"))
+        if not delta:
+            return jsonify({"erro": "Informe o tempo do bloqueio ou marque permanente."}), 400
+        until = datetime.utcnow() + delta
+    row = DeviceBlock(
+        token=os.urandom(24).hex(),
+        ip=ip,
+        manual=True,
+        attempt_count=0,
+        strike_level=0,
+        blocked_until=until,
+    )
+    db.session.add(row)
+    db.session.commit()
+    return jsonify({"ok": True, "bloqueio": row.to_dict()}), 201
 
 
 @app.route("/api/bloqueios")

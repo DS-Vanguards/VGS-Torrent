@@ -85,6 +85,7 @@ ROLE_RANK = {
 }
 
 STAFF_ROLES = ("vgs_owner", "admin")
+CONFIGURABLE_ROLES = tuple(role for role in ROLES if role not in STAFF_ROLES)
 
 TIERS = ["basico", "vip", "mega_vip", "super_vip", "escolar", "pro_client"]
 

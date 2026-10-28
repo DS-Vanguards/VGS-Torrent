@@ -13,11 +13,17 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=2">
   <title>{% block title %}VGS-Torrent{% endblock %}</title>
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}{% if current_user.is_authenticated %} has-side{% endif %}">
   {% block body %}
+  {% if current_user.is_authenticated %}
+  <aside class="sidebar" id="sidebar">
+    {% block nav %}{% endblock %}
+  </aside>
+  {% endif %}
+  <div class="shell">
   <div class="topbar">
     <a class="topbar-brand" href="{{ url_for('painel') if current_user.is_authenticated else url_for('login') }}">
       <img class="brand-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="VGS-Torrent">
@@ -26,8 +32,8 @@
         <div class="brand-sub">Acervo da Vanguards</div>
       </div>
     </a>
-    {% block nav %}{% endblock %}
     {% if current_user.is_authenticated %}
+    <button class="nav-drawer-toggle" id="nav-drawer-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Abas</button>
     <div class="topbar-actions">
       <span class="user-chip">{{ current_user.username }} · {{ current_user.role_label }}</span>
       <form method="POST" action="{{ url_for('logout') }}" class="logout-form">
@@ -49,11 +55,12 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+  {% include '_layout_footer.html' %}
+  </div>
   {% endblock %}
 
   {% block modals %}{% endblock %}
 
-  {% include '_layout_footer.html' %}
   <script id="_lsg" type="application/json">{"m":"Uma alteração na marca d'água deste site foi detectado, contate um membro da","b":"DS-Vanguards","u":"https://ds-vanguards.vercel.app/","t":"sobre o ocorrido"}</script>
   <div id="_lsx" class="lsx-o" hidden role="alert">
     <div class="lsx-i">
