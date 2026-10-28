@@ -33,6 +33,7 @@ from hardening import (
     too_many_requests,
 )
 from models import (
+    AppMeta,
     DeviceBlock,
     LibraryItem,
     RoleSection,
@@ -465,6 +466,28 @@ def painel():
     )
 
 
+def meta_value(key: str, default: str) -> str:
+    row = db.session.get(AppMeta, key)
+    if row is None or not (row.value or "").strip():
+        return default
+    return row.value
+
+
+def set_meta(key: str, value: str) -> None:
+    row = db.session.get(AppMeta, key)
+    if row is None:
+        db.session.add(AppMeta(key=key, value=value))
+    else:
+        row.value = value
+
+
+def nav_folder_meta() -> dict:
+    return {
+        "title": meta_value("nav_folder_title", "Grupo")[:40],
+        "icon": meta_value("nav_folder_icon", "🗄️")[:8],
+    }
+
+
 def section_payload(section: Section, *, include_hidden=False) -> dict:
     if include_hidden:
         count = LibraryItem.query.filter_by(section_id=section.id).count()
@@ -482,7 +505,38 @@ def api_list_sections():
         if staff
         else visible_sections()
     )
-    return jsonify({"secoes": [section_payload(row, include_hidden=staff) for row in rows]})
+    return jsonify({
+        "secoes": [section_payload(row, include_hidden=staff) for row in rows],
+        "grupo": nav_folder_meta(),
+    })
+
+
+@app.route("/api/menu-grupo", methods=["PUT"])
+@staff_required
+def api_save_nav_folder():
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()[:40] or "Grupo"
+    icon = (data.get("icon") or "").strip()[:8] or "🗄️"
+    wanted = set()
+    for value in data.get("section_ids") or []:
+        try:
+            wanted.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    valid = (
+        {
+            section_id
+            for (section_id,) in db.session.query(Section.id).filter(Section.id.in_(wanted)).all()
+        }
+        if wanted
+        else set()
+    )
+    for section in Section.query.all():
+        section.in_folder = section.id in valid
+    set_meta("nav_folder_title", title)
+    set_meta("nav_folder_icon", icon)
+    db.session.commit()
+    return jsonify({"ok": True, "grupo": nav_folder_meta(), "section_ids": sorted(valid)})
 
 
 @app.route("/api/secoes", methods=["POST"])

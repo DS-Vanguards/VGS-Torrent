@@ -13,27 +13,52 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=2">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=3">
+  <script>
+    try {
+      if (localStorage.getItem("vgs-side") === "mini") document.documentElement.classList.add("side-mini");
+    } catch (e) {}
+  </script>
   <title>{% block title %}VGS-Torrent{% endblock %}</title>
 </head>
 <body class="{% block body_class %}{% endblock %}{% if current_user.is_authenticated %} has-side{% endif %}">
   {% block body %}
   {% if current_user.is_authenticated %}
   <aside class="sidebar" id="sidebar">
-    {% block nav %}{% endblock %}
+    <a class="sidebar-brand" href="{{ url_for('painel') }}">
+      <img class="brand-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="VGS-Torrent">
+      <div class="brand-copy">
+        <div class="brand-name">VGS-Torrent</div>
+        <div class="brand-sub">Acervo da Vanguards</div>
+      </div>
+    </a>
+    <div class="sidebar-scroll">
+      {% block nav %}{% endblock %}
+    </div>
+    <button class="sidebar-collapse" id="sidebar-collapse" type="button" aria-label="Recolher menu">
+      <span class="collapse-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7">
+          <rect x="3.5" y="4.5" width="17" height="15" rx="2"></rect>
+          <path d="M9 4.5v15"></path>
+          <path d="M16 9.5 12.5 12 16 14.5"></path>
+        </svg>
+      </span>
+      <span class="collapse-label">Recolher menu</span>
+    </button>
   </aside>
   {% endif %}
   <div class="shell">
   <div class="topbar">
-    <a class="topbar-brand" href="{{ url_for('painel') if current_user.is_authenticated else url_for('login') }}">
+    {% if not current_user.is_authenticated %}
+    <a class="topbar-brand" href="{{ url_for('login') }}">
       <img class="brand-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="VGS-Torrent">
       <div>
         <div class="brand-name">VGS-Torrent</div>
         <div class="brand-sub">Acervo da Vanguards</div>
       </div>
     </a>
+    {% endif %}
     {% if current_user.is_authenticated %}
-    <button class="nav-drawer-toggle" id="nav-drawer-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Abas</button>
     <div class="topbar-actions">
       <span class="user-chip">{{ current_user.username }} · {{ current_user.role_label }}</span>
       <form method="POST" action="{{ url_for('logout') }}" class="logout-form">

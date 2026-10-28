@@ -10,6 +10,7 @@
     assignableRoles: VGS.roles || [],
     roleUserId: null,
     pickedRole: "",
+    folder: { title: "Grupo", icon: "🗄️" },
   };
 
   const $ = (id) => document.getElementById(id);
@@ -61,20 +62,46 @@
     if (modal) modal.classList.remove("open");
   }
 
+  function tabButton(section) {
+    const active = String(section.id) === String(state.tab);
+    return `<button class="nav-tab${active ? " active" : ""}" data-tab="${section.id}" type="button" title="${escapeHtml(section.title)}">
+      <span class="tab-icon">${escapeHtml(section.icon || "💾")}</span>
+      <span class="nav-label">${escapeHtml(section.title)}</span>
+    </button>`;
+  }
+
+  function folderIsOpen() {
+    try {
+      return localStorage.getItem("vgs-folder") !== "closed";
+    } catch (err) {
+      return true;
+    }
+  }
+
   function renderNav() {
     const nav = $("main-nav");
     if (!nav) return;
-    const buttons = state.sections
-      .map(
-        (section) => `<button class="nav-tab${String(section.id) === String(state.tab) ? " active" : ""}" data-tab="${section.id}" type="button">
-          <span class="tab-icon">${escapeHtml(section.icon || "💾")}</span> ${escapeHtml(section.title)}
-        </button>`
-      )
-      .join("");
+    const loose = state.sections.filter((section) => !section.in_folder);
+    const grouped = state.sections.filter((section) => section.in_folder);
+    let folder = "";
+    if (grouped.length) {
+      const open = folderIsOpen();
+      const childActive = grouped.some((section) => String(section.id) === String(state.tab));
+      const icon = escapeHtml((state.folder && state.folder.icon) || "🗄️");
+      const title = escapeHtml((state.folder && state.folder.title) || "Grupo");
+      folder = `<div class="nav-folder${open ? " is-open" : ""}">
+        <button class="nav-folder-btn${childActive ? " has-active" : ""}" id="nav-folder-toggle" type="button" aria-expanded="${open ? "true" : "false"}" title="${title}">
+          <span class="tab-icon">${icon}</span>
+          <span class="nav-label">${title}</span>
+          <span class="folder-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div class="nav-folder-items">${grouped.map(tabButton).join("")}</div>
+      </div>`;
+    }
     const admin = VGS.isAdmin
-      ? `<button class="nav-tab${state.tab === "admin" ? " active" : ""}" data-tab="admin" type="button"><span class="tab-icon">⚙</span> Administração</button>`
+      ? `<button class="nav-tab${state.tab === "admin" ? " active" : ""}" data-tab="admin" type="button" title="Administração"><span class="tab-icon">⚙</span><span class="nav-label">Administração</span></button>`
       : "";
-    nav.innerHTML = buttons + admin;
+    nav.innerHTML = loose.map(tabButton).join("") + folder + admin;
   }
 
   function renderItems() {
@@ -123,6 +150,7 @@
   async function loadSections(preferred) {
     const data = await request("/api/secoes");
     state.sections = data.secoes || [];
+    state.folder = data.grupo || state.folder;
     if (preferred && (preferred === "admin" || state.sections.some((row) => String(row.id) === String(preferred)))) {
       state.tab = preferred;
     } else if (!state.sections.some((row) => String(row.id) === String(state.tab)) && state.tab !== "admin") {
@@ -436,14 +464,47 @@
     });
   }
 
+  function renderFolderForm() {
+    const box = $("folder-checks");
+    if (!box) return;
+    const title = $("folder-title");
+    const icon = $("folder-icon");
+    if (title) title.value = (state.folder && state.folder.title) || "Grupo";
+    if (icon) icon.value = (state.folder && state.folder.icon) || "🗄️";
+    if (!state.sections.length) {
+      box.innerHTML = `<span class="text-muted">Nenhuma aba criada.</span>`;
+      return;
+    }
+    box.innerHTML = state.sections
+      .map(
+        (section) => `<label class="check-row">
+          <input type="checkbox" data-folder-section="${section.id}"${section.in_folder ? " checked" : ""}>
+          <span>${escapeHtml(section.icon || "💾")} ${escapeHtml(section.title)}</span>
+        </label>`
+      )
+      .join("");
+  }
+
   async function loadAdminTables() {
     renderSections();
+    renderFolderForm();
     await loadAccess();
     await loadUsers();
     await loadBlocks();
   }
 
   document.addEventListener("click", async (event) => {
+    const folderBtn = event.target.closest("#nav-folder-toggle");
+    if (folderBtn) {
+      const wrap = folderBtn.closest(".nav-folder");
+      const open = wrap.classList.toggle("is-open");
+      folderBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      try {
+        localStorage.setItem("vgs-folder", open ? "open" : "closed");
+      } catch (err) {}
+      return;
+    }
+
     const tabBtn = event.target.closest("[data-tab]");
     if (tabBtn && tabBtn.closest("#main-nav")) {
       state.tab = tabBtn.dataset.tab;
@@ -463,11 +524,6 @@
           showToast("✘ " + err.message);
         }
       }
-      $("main-nav").classList.remove("is-open");
-      const sidebar = $("sidebar");
-      if (sidebar) sidebar.classList.remove("is-open");
-      const drawerBtn = $("nav-drawer-toggle");
-      if (drawerBtn) drawerBtn.setAttribute("aria-expanded", "false");
       return;
     }
 
@@ -677,6 +733,27 @@
       } catch (err) {
         showToast("✘ " + err.message);
       }
+      return;
+    }
+    if (event.target.id === "folder-form") {
+      event.preventDefault();
+      const sectionIds = [...document.querySelectorAll("[data-folder-section]")]
+        .filter((box) => box.checked)
+        .map((box) => Number(box.dataset.folderSection));
+      try {
+        await request("/api/menu-grupo", {
+          method: "PUT",
+          body: JSON.stringify({
+            title: $("folder-title").value.trim(),
+            icon: $("folder-icon").value.trim(),
+            section_ids: sectionIds,
+          }),
+        });
+        showToast("✔ Botão atualizado");
+        await loadSections(state.tab);
+      } catch (err) {
+        showToast("✘ " + err.message);
+      }
     }
   });
 
@@ -700,12 +777,22 @@
     }
   });
 
-  const drawer = $("nav-drawer-toggle");
-  if (drawer) {
-    drawer.addEventListener("click", () => {
-      const sidebar = $("sidebar");
-      const open = sidebar ? sidebar.classList.toggle("is-open") : false;
-      drawer.setAttribute("aria-expanded", open ? "true" : "false");
+  const collapse = $("sidebar-collapse");
+  if (collapse) {
+    const syncLabel = () => {
+      const mini = document.documentElement.classList.contains("side-mini");
+      const text = mini ? "Expandir menu" : "Recolher menu";
+      collapse.setAttribute("aria-label", text);
+      const label = collapse.querySelector(".collapse-label");
+      if (label) label.textContent = text;
+    };
+    syncLabel();
+    collapse.addEventListener("click", () => {
+      const mini = document.documentElement.classList.toggle("side-mini");
+      try {
+        localStorage.setItem("vgs-side", mini ? "mini" : "full");
+      } catch (err) {}
+      syncLabel();
     });
   }
 

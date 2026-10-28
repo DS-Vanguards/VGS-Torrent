@@ -106,6 +106,7 @@ class Section(db.Model):
     icon = db.Column(db.String(8), default="💾", nullable=False)
     tier = db.Column(db.String(32), default="basico", nullable=False)
     sort_order = db.Column(db.Integer, default=0, nullable=False)
+    in_folder = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -126,6 +127,7 @@ class Section(db.Model):
             "tier": self.tier,
             "tier_label": config.TIER_LABELS.get(self.tier, self.tier),
             "sort_order": self.sort_order,
+            "in_folder": bool(self.in_folder),
             "item_count": item_count,
         }
 
@@ -231,6 +233,7 @@ def ensure_schema() -> None:
         db.session.commit()
     _add_column("users", "is_primary", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
     _add_column("device_blocks", "manual", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
+    _add_column("sections", "in_folder", f"BOOLEAN NOT NULL DEFAULT {_bool_default()}")
     mark_primary_user()
 
 
