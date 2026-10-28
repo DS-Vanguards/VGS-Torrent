@@ -13,6 +13,7 @@
     dividers: [],
     seenIp: VGS.seenIp || "",
     access: null,
+    channels: null,
     userWatch: 0,
   };
 
@@ -76,31 +77,53 @@
   function renderNav() {
     const nav = $("main-nav");
     if (!nav) return;
-    const marks = [
-      ...state.sections.map((section) => ({
-        kind: "tab",
-        order: Number(section.sort_order) || 0,
-        section,
-      })),
-      ...state.dividers.map((divider) => ({
-        kind: "div",
-        order: Number(divider.sort_order) || 0,
-        divider,
-      })),
-    ];
-    marks.sort((a, b) => a.order - b.order || (a.kind === "div" ? -1 : 1));
-    const html = marks
-      .map((mark) => {
-        if (mark.kind === "div") {
-          return `<div class="nav-divider" title="${escapeHtml(mark.divider.title)}"><span class="nav-divider-label">${escapeHtml(mark.divider.title)}</span></div>`;
-        }
-        return tabButton(mark.section);
-      })
-      .join("");
+    const grouped = state.dividers.some((divider) => (divider.section_ids || []).length);
     const admin = VGS.isAdmin
       ? `<button class="nav-tab${state.tab === "admin" ? " active" : ""}" data-tab="admin" type="button" title="Administração"><span class="tab-icon">⚙</span><span class="nav-label">Administração</span></button>`
       : "";
-    nav.innerHTML = html + admin;
+    if (!grouped) {
+      const marks = [
+        ...state.sections.map((section) => ({
+          kind: "tab",
+          order: Number(section.sort_order) || 0,
+          section,
+        })),
+        ...state.dividers.map((divider) => ({
+          kind: "div",
+          order: Number(divider.sort_order) || 0,
+          divider,
+        })),
+      ];
+      marks.sort((a, b) => a.order - b.order || (a.kind === "div" ? -1 : 1));
+      nav.innerHTML = marks
+        .map((mark) => {
+          if (mark.kind === "div") {
+            return `<div class="nav-divider" title="${escapeHtml(mark.divider.title)}"><span class="nav-divider-label">${escapeHtml(mark.divider.title)}</span></div>`;
+          }
+          return tabButton(mark.section);
+        })
+        .join("") + admin;
+      return;
+    }
+    const byId = new Map(state.sections.map((section) => [String(section.id), section]));
+    const placed = new Set();
+    state.dividers.forEach((divider) => {
+      (divider.section_ids || []).forEach((id) => placed.add(String(id)));
+    });
+    const groupHtml = state.dividers
+      .map((divider) => {
+        const sections = (divider.section_ids || [])
+          .map((id) => byId.get(String(id)))
+          .filter(Boolean)
+          .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || a.title.localeCompare(b.title));
+        if (!sections.length && !VGS.isAdmin) return "";
+        return `<div class="nav-divider" title="${escapeHtml(divider.title)}"><span class="nav-divider-label">${escapeHtml(divider.title)}</span></div>${sections.map(tabButton).join("")}`;
+      })
+      .join("");
+    const loose = state.sections
+      .filter((section) => !placed.has(String(section.id)))
+      .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || a.title.localeCompare(b.title));
+    nav.innerHTML = groupHtml + loose.map(tabButton).join("") + admin;
   }
 
   function renderItems() {
@@ -457,6 +480,16 @@
     }
   }
 
+  function blockTarget(row) {
+    const attempts = row.manual ? `${Number(row.attempt_count) || 0} · ` : "";
+    const ip = escapeHtml(row.ip);
+    if (row.match_both || row.match_serial) {
+      const serial = escapeHtml((row.serial || "").slice(0, 12));
+      return `${attempts}IP ${ip} · <span title="${escapeHtml(row.serial || "")}">Serial ${serial}</span>`;
+    }
+    return `${attempts}${ip}`;
+  }
+
   async function loadBlocks() {
     const body = $("blocks-body");
     if (!body) return;
@@ -476,7 +509,7 @@
       .map(
         (row) => `<tr>
           <td style="font-family:var(--mono);font-size:11px">${escapeHtml(row.token)}</td>
-          <td>${row.match_both ? `IP ${escapeHtml(row.ip)} · Serial ${escapeHtml((row.serial || "").slice(0, 12))}` : row.match_serial ? `<span title="${escapeHtml(row.serial)}">Serial ${escapeHtml((row.serial || "").slice(0, 12))}</span>` : escapeHtml(row.ip)}</td>
+          <td>${blockTarget(row)}</td>
           <td><span class="badge ${row.manual || row.strike_level >= 6 ? "badge-danger" : "badge-yellow"}">${escapeHtml(row.level_label)}</span></td>
           <td>${escapeHtml(row.blocked_until)}</td>
           <td>
@@ -499,22 +532,22 @@
     const box = $("access-checks");
     if (!box) return;
     const roles = (state.access && state.access.cargos) || [];
-    const sections = (state.access && state.access.secoes) || [];
+    const dividers = (state.access && state.access.divisoes) || [];
     const role = roles.find((row) => row.role === ($("access-role") ? $("access-role").value : ""));
     if (!role) {
       box.innerHTML = `<p class="admin-hint">Nenhum cargo configurável.</p>`;
       return;
     }
-    if (!sections.length) {
-      box.innerHTML = `<p class="text-muted">Nenhuma aba criada.</p>`;
+    if (!dividers.length) {
+      box.innerHTML = `<p class="text-muted">Nenhuma divisão criada.</p>`;
       return;
     }
-    const selected = new Set((role.section_ids || []).map(String));
-    box.innerHTML = sections
+    const selected = new Set((role.divider_ids || []).map(String));
+    box.innerHTML = dividers
       .map(
-        (section) => `<label class="check-row">
-          <input type="checkbox" data-access-section="${section.id}"${selected.has(String(section.id)) ? " checked" : ""}>
-          <span>${escapeHtml(section.icon)} ${escapeHtml(section.title)}</span>
+        (divider) => `<label class="check-row">
+          <input type="checkbox" data-access-divider="${divider.id}"${selected.has(String(divider.id)) ? " checked" : ""}>
+          <span>${escapeHtml(divider.title)}</span>
         </label>`
       )
       .join("");
@@ -535,14 +568,67 @@
   }
 
   async function saveAccess(role) {
-    const boxes = [...document.querySelectorAll("#access-checks [data-access-section]")];
-    const sectionIds = boxes.filter((box) => box.checked).map((box) => Number(box.dataset.accessSection));
+    const boxes = [...document.querySelectorAll("#access-checks [data-access-divider]")];
+    const dividerIds = boxes.filter((box) => box.checked).map((box) => Number(box.dataset.accessDivider));
     const data = await request("/api/acessos", {
       method: "PUT",
-      body: JSON.stringify({ role, section_ids: sectionIds }),
+      body: JSON.stringify({ role, divider_ids: dividerIds }),
     });
     const cargo = ((state.access && state.access.cargos) || []).find((row) => row.role === role);
-    if (cargo) cargo.section_ids = data.section_ids || sectionIds;
+    if (cargo) cargo.divider_ids = data.divider_ids || dividerIds;
+  }
+
+  async function loadChannels() {
+    if (!$("btn-channels")) return;
+    state.channels = await request("/api/canais-divisao");
+  }
+
+  function renderChannelChecks() {
+    const box = $("channel-checks");
+    if (!box) return;
+    const dividers = (state.channels && state.channels.divisoes) || [];
+    const sections = (state.channels && state.channels.secoes) || [];
+    const divider = dividers.find((row) => String(row.id) === ($("channel-divider") ? $("channel-divider").value : ""));
+    if (!divider) {
+      box.innerHTML = `<p class="admin-hint">Nenhuma divisão criada.</p>`;
+      return;
+    }
+    if (!sections.length) {
+      box.innerHTML = `<p class="text-muted">Nenhuma aba criada.</p>`;
+      return;
+    }
+    const selected = new Set((divider.section_ids || []).map(String));
+    box.innerHTML = sections
+      .map(
+        (section) => `<label class="check-row">
+          <input type="checkbox" data-channel-section="${section.id}"${selected.has(String(section.id)) ? " checked" : ""}>
+          <span>${escapeHtml(section.icon || "💾")} ${escapeHtml(section.title)}</span>
+        </label>`
+      )
+      .join("");
+  }
+
+  function openChannelModal() {
+    const select = $("channel-divider");
+    const dividers = (state.channels && state.channels.divisoes) || [];
+    if (select) {
+      select.innerHTML = dividers.length
+        ? dividers.map((divider) => `<option value="${divider.id}">${escapeHtml(divider.title)}</option>`).join("")
+        : `<option value="">Nenhuma divisão criada</option>`;
+    }
+    renderChannelChecks();
+    openModal("channel-modal");
+  }
+
+  async function saveChannels(dividerId) {
+    const boxes = [...document.querySelectorAll("#channel-checks [data-channel-section]")];
+    const sectionIds = boxes.filter((box) => box.checked).map((box) => Number(box.dataset.channelSection));
+    const data = await request("/api/canais-divisao", {
+      method: "PUT",
+      body: JSON.stringify({ divider_id: Number(dividerId), section_ids: sectionIds }),
+    });
+    const divider = ((state.channels && state.channels.divisoes) || []).find((row) => String(row.id) === String(dividerId));
+    if (divider) divider.section_ids = data.section_ids || sectionIds;
   }
 
   function renderDividers() {
@@ -580,6 +666,7 @@
     renderSections();
     renderDividers();
     await loadAccess();
+    await loadChannels();
     await loadUsers();
     await loadBlocks();
   }
@@ -651,6 +738,15 @@
       try {
         if (!state.access) await loadAccess();
         openAccessModal();
+      } catch (err) {
+        showToast("✘ " + err.message);
+      }
+      return;
+    }
+    if (event.target.closest("#btn-channels")) {
+      try {
+        if (!state.channels) await loadChannels();
+        openChannelModal();
       } catch (err) {
         showToast("✘ " + err.message);
       }
@@ -883,8 +979,26 @@
       }
       try {
         await saveAccess(role);
-        showToast("✔ Canais atualizados");
+        showToast("✔ Divisões atualizadas");
         closeModal("access-modal");
+        await loadSections("admin");
+      } catch (err) {
+        showToast("✘ " + err.message);
+      }
+      return;
+    }
+    if (event.target.id === "channel-form") {
+      event.preventDefault();
+      const dividerId = $("channel-divider") ? $("channel-divider").value : "";
+      if (!dividerId) {
+        showToast("✘ Selecione uma divisão");
+        return;
+      }
+      try {
+        await saveChannels(dividerId);
+        showToast("✔ Canais atualizados");
+        closeModal("channel-modal");
+        await loadSections("admin");
       } catch (err) {
         showToast("✘ " + err.message);
       }
@@ -901,6 +1015,7 @@
       return;
     }
     if (event.target.id === "access-role") renderAccessChecks();
+    if (event.target.id === "channel-divider") renderChannelChecks();
     if (event.target.id === "manual-mode") syncBlockMode();
   });
 

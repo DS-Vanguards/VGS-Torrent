@@ -40,7 +40,9 @@ from hardening import (
 from models import (
     DeviceBlock,
     LibraryItem,
+    DividerSection,
     NavDivider,
+    RoleDivider,
     RoleSection,
     Section,
     User,
@@ -212,11 +214,30 @@ def parse_sort(value, default=0) -> int:
     return number
 
 
+def divider_section_map() -> dict:
+    mapping = {}
+    for link in DividerSection.query.all():
+        mapping.setdefault(link.divider_id, []).append(link.section_id)
+    return mapping
+
+
 def user_can_see_section(section: Section) -> bool:
     if current_user.role in config.STAFF_ROLES:
         return True
+    divider_ids = [
+        link.divider_id
+        for link in DividerSection.query.filter_by(section_id=section.id).all()
+    ]
+    if not divider_ids:
+        return (
+            RoleSection.query.filter_by(role=current_user.role, section_id=section.id).first()
+            is not None
+        )
     return (
-        RoleSection.query.filter_by(role=current_user.role, section_id=section.id).first()
+        RoleDivider.query.filter(
+            RoleDivider.role == current_user.role,
+            RoleDivider.divider_id.in_(divider_ids),
+        ).first()
         is not None
     )
 
@@ -322,7 +343,9 @@ def guard_manual_block():
         return
     block = manual_block_for_request()
     if block:
-        return render_template("bloqueio_manual.html")
+        serial = machine_serial_for_page()
+        absorb_blocked_identity(block, serial)
+        return render_template("bloqueio_manual.html", serial=serial)
 
 
 def manual_block_for_request():
@@ -356,6 +379,46 @@ def manual_block_for_request():
         if ip_hit:
             return row
     return None
+
+
+def machine_serial_for_page() -> str:
+    cookie = (request.cookies.get(COOKIE_NAME) or "").strip().lower()
+    if cookie:
+        return cookie
+    device = ensure_machine()
+    g.machine_token = device.token
+    return device.token or ""
+
+
+def absorb_blocked_identity(row: DeviceBlock, serial: str) -> None:
+    from datetime import datetime
+    from secrets import token_hex
+
+    serial = (serial or "").strip().lower()
+    ip = client_ip()
+    stored_serial = (row.token or "").lower()
+    same_serial = bool(serial and serial == stored_serial)
+    same_ip = bool(ip and normalize_ip(row.ip) == ip)
+    changed = False
+    if same_serial and (row.match_serial or row.match_both) and ip and not same_ip:
+        row.ip = ip
+        changed = True
+    if same_ip and serial and not same_serial and not row.match_serial:
+        other = DeviceBlock.query.filter_by(token=serial).first()
+        if other and other.id != row.id:
+            if other.manual and other.is_blocked():
+                return
+            other.token = token_hex(24)
+            db.session.flush()
+        row.token = serial
+        changed = True
+    if not changed:
+        return
+    row.attempt_count = (row.attempt_count or 0) + 1
+    row.match_serial = False
+    row.match_both = True
+    row.updated_at = datetime.utcnow()
+    db.session.commit()
 
 
 @app.before_request
@@ -538,9 +601,23 @@ def api_list_sections():
         else visible_sections()
     )
     dividers = NavDivider.query.order_by(NavDivider.sort_order.asc(), NavDivider.id.asc()).all()
+    links = divider_section_map()
+    visible_ids = {row.id for row in rows}
+    if not staff and links:
+        allowed = {
+            grant.divider_id
+            for grant in RoleDivider.query.filter_by(role=current_user.role).all()
+        }
+        dividers = [row for row in dividers if row.id in allowed]
     return jsonify({
         "secoes": [section_payload(row, include_hidden=staff) for row in rows],
-        "divisoes": [row.to_dict() for row in dividers],
+        "divisoes": [
+            {
+                **row.to_dict(),
+                "section_ids": [section_id for section_id in links.get(row.id, []) if section_id in visible_ids],
+            }
+            for row in dividers
+        ],
     })
 
 
@@ -579,6 +656,8 @@ def api_delete_divider(divider_id):
     row = db.session.get(NavDivider, divider_id)
     if not row:
         return jsonify({"erro": "Divisão não encontrada."}), 404
+    DividerSection.query.filter_by(divider_id=row.id).delete(synchronize_session=False)
+    RoleDivider.query.filter_by(divider_id=row.id).delete(synchronize_session=False)
     db.session.delete(row)
     db.session.commit()
     return jsonify({"ok": True})
@@ -642,6 +721,7 @@ def api_delete_section(section_id):
     if not section:
         return jsonify({"erro": "Aba não encontrada."}), 404
     RoleSection.query.filter_by(section_id=section.id).delete(synchronize_session=False)
+    DividerSection.query.filter_by(section_id=section.id).delete(synchronize_session=False)
     db.session.delete(section)
     db.session.commit()
     return jsonify({"ok": True})
@@ -904,21 +984,21 @@ def api_delete_user(user_id):
 @app.route("/api/acessos")
 @staff_required
 def api_list_access():
-    sections = Section.query.order_by(Section.sort_order.asc(), Section.title.asc()).all()
-    grants = RoleSection.query.all()
+    dividers = NavDivider.query.order_by(NavDivider.sort_order.asc(), NavDivider.id.asc()).all()
+    grants = RoleDivider.query.all()
     by_role = {}
     for grant in grants:
-        by_role.setdefault(grant.role, []).append(grant.section_id)
+        by_role.setdefault(grant.role, []).append(grant.divider_id)
     return jsonify({
-        "secoes": [
-            {"id": section.id, "title": section.title, "icon": section.icon or "💾"}
-            for section in sections
+        "divisoes": [
+            {"id": row.id, "title": row.title}
+            for row in dividers
         ],
         "cargos": [
             {
                 "role": role,
                 "label": config.role_label(role),
-                "section_ids": by_role.get(role, []),
+                "divider_ids": by_role.get(role, []),
             }
             for role in config.CONFIGURABLE_ROLES
         ],
@@ -931,7 +1011,54 @@ def api_save_access():
     data = request.get_json(silent=True) or {}
     role = (data.get("role") or "").strip()
     if role not in config.CONFIGURABLE_ROLES:
-        return jsonify({"erro": "Este cargo não entra na seleção de canais."}), 400
+        return jsonify({"erro": "Este cargo não entra na seleção de divisões."}), 400
+    raw_ids = data.get("divider_ids") or []
+    wanted = set()
+    for value in raw_ids:
+        try:
+            wanted.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    valid = {
+        divider_id
+        for (divider_id,) in db.session.query(NavDivider.id).filter(NavDivider.id.in_(wanted or {0})).all()
+    } if wanted else set()
+    RoleDivider.query.filter_by(role=role).delete(synchronize_session=False)
+    for divider_id in sorted(valid):
+        db.session.add(RoleDivider(role=role, divider_id=divider_id))
+    db.session.commit()
+    return jsonify({"ok": True, "role": role, "divider_ids": sorted(valid)})
+
+
+@app.route("/api/canais-divisao")
+@staff_required
+def api_list_divider_channels():
+    dividers = NavDivider.query.order_by(NavDivider.sort_order.asc(), NavDivider.id.asc()).all()
+    sections = Section.query.order_by(Section.sort_order.asc(), Section.title.asc()).all()
+    links = divider_section_map()
+    return jsonify({
+        "divisoes": [
+            {"id": row.id, "title": row.title, "section_ids": links.get(row.id, [])}
+            for row in dividers
+        ],
+        "secoes": [
+            {"id": row.id, "title": row.title, "icon": row.icon or "💾"}
+            for row in sections
+        ],
+    })
+
+
+@app.route("/api/canais-divisao", methods=["PUT"])
+@staff_required
+def api_save_divider_channels():
+    data = request.get_json(silent=True) or {}
+    try:
+        divider_id = int(data.get("divider_id"))
+    except (TypeError, ValueError):
+        return jsonify({"erro": "Selecione a divisão."}), 400
+    divider = db.session.get(NavDivider, divider_id)
+    if not divider:
+        return jsonify({"erro": "Divisão não encontrada."}), 404
     raw_ids = data.get("section_ids") or []
     wanted = set()
     for value in raw_ids:
@@ -943,11 +1070,11 @@ def api_save_access():
         section_id
         for (section_id,) in db.session.query(Section.id).filter(Section.id.in_(wanted or {0})).all()
     } if wanted else set()
-    RoleSection.query.filter_by(role=role).delete(synchronize_session=False)
+    DividerSection.query.filter_by(divider_id=divider.id).delete(synchronize_session=False)
     for section_id in sorted(valid):
-        db.session.add(RoleSection(role=role, section_id=section_id))
+        db.session.add(DividerSection(divider_id=divider.id, section_id=section_id))
     db.session.commit()
-    return jsonify({"ok": True, "section_ids": sorted(valid)})
+    return jsonify({"ok": True, "divider_id": divider.id, "section_ids": sorted(valid)})
 
 
 def clean_block_ip(value: str):

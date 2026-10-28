@@ -160,6 +160,45 @@ class NavDivider(db.Model):
         }
 
 
+class DividerSection(db.Model):
+    __tablename__ = "divider_sections"
+
+    id = db.Column(db.Integer, primary_key=True)
+    divider_id = db.Column(
+        db.Integer,
+        db.ForeignKey("nav_dividers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    section_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("divider_id", "section_id", name="uq_divider_section"),
+    )
+
+
+class RoleDivider(db.Model):
+    __tablename__ = "role_dividers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    role = db.Column(db.String(32), nullable=False, index=True)
+    divider_id = db.Column(
+        db.Integer,
+        db.ForeignKey("nav_dividers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("role", "divider_id", name="uq_role_divider"),
+    )
+
+
 class RoleSection(db.Model):
     __tablename__ = "role_sections"
 

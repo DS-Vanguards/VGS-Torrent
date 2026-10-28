@@ -24,7 +24,7 @@
       <div class="section-title" style="margin:0;padding:0;border:none">Abas do acervo</div>
       <button class="save-btn" id="btn-add-section" type="button">+ NOVA ABA</button>
     </div>
-    <p class="admin-hint">Crie e edite as abas aqui. Quem vê cada aba é definido em <strong>Canais por cargo</strong>. Admin e VGS-Owner's continuam vendo todas.</p>
+    <p class="admin-hint">Crie e edite as abas aqui. Quem vê cada grupo é definido em <strong>Divisões por cargo</strong>. Admin e VGS-Owner's continuam vendo todas.</p>
     <div class="table-wrap admin-table-wrap">
       <table class="resumo-table">
         <thead>
@@ -41,16 +41,10 @@
     </div>
 
     <div class="admin-users-head" style="margin-top:28px">
-      <div class="section-title" style="margin:0;padding:0;border:none">Canais por cargo</div>
-      <button class="save-btn" id="btn-access" type="button">ATRIBUIR CANAIS</button>
-    </div>
-    <p class="admin-hint">Admin e VGS-Owner's veem todas as abas. Os outros cargos só veem as abas marcadas no formulário.</p>
-
-    <div class="admin-users-head" style="margin-top:28px">
       <div class="section-title" style="margin:0;padding:0;border:none">Divisões da lateral</div>
       <button class="save-btn" id="btn-add-divider" type="button">+ NOVA DIVISÃO</button>
     </div>
-    <p class="admin-hint">Uma divisão é um título que separa as abas. A <strong>ordem</strong> é a mesma das abas: uma divisão com ordem 15 fica entre a aba 10 e a aba 20, e não fica presa no fim da lista.</p>
+    <p class="admin-hint">Uma divisão agrupa as abas na lateral. A ordem define a posição do grupo. Os canais de cada grupo são escolhidos em <strong>Canais por divisão</strong>.</p>
     <div class="table-wrap admin-table-wrap">
       <table class="resumo-table">
         <thead>
@@ -63,6 +57,18 @@
         <tbody id="dividers-body"></tbody>
       </table>
     </div>
+
+    <div class="admin-users-head" style="margin-top:28px">
+      <div class="section-title" style="margin:0;padding:0;border:none">Canais por divisão</div>
+      <button class="save-btn" id="btn-channels" type="button">ATRIBUIR CANAIS</button>
+    </div>
+    <p class="admin-hint">Escolha a divisão e marque as abas que aparecem nela. Uma aba pode entrar em mais de uma divisão.</p>
+
+    <div class="admin-users-head" style="margin-top:28px">
+      <div class="section-title" style="margin:0;padding:0;border:none">Divisões por cargo</div>
+      <button class="save-btn" id="btn-access" type="button">ATRIBUIR DIVISÕES</button>
+    </div>
+    <p class="admin-hint">Admin e VGS-Owner's veem todas as abas. Os outros cargos veem as abas das divisões marcadas. Aba sem divisão continua com o acesso que já tinha.</p>
 
     <div class="admin-users-head" style="margin-top:28px">
       <div class="section-title" style="margin:0;padding:0;border:none">Usuários e cargos</div>
@@ -231,14 +237,32 @@
 {% endif %}
 
 {% if is_admin %}
+<div class="modal-overlay" id="channel-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Canais por divisão</span>
+      <button class="modal-close-btn" type="button" data-close="channel-modal">✕</button>
+    </div>
+    <form class="modal-body" id="channel-form">
+      <p class="admin-hint">Escolha a divisão e marque as abas que aparecem com ela. Salve antes de trocar de divisão. Quem não for Admin nem VGS-Owner's só vê essas abas se o cargo tiver a divisão.</p>
+      <label for="channel-divider">Divisão</label>
+      <select class="form-input" id="channel-divider" required></select>
+      <div id="channel-checks" class="access-checks"></div>
+    </form>
+    <div class="modal-footer">
+      <button class="close-footer-btn" type="button" data-close="channel-modal">CANCELAR</button>
+      <button class="print-btn" type="submit" form="channel-form">SALVAR</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="access-modal">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">Canais por cargo</span>
+      <span class="modal-title">Divisões por cargo</span>
       <button class="modal-close-btn" type="button" data-close="access-modal">✕</button>
     </div>
     <form class="modal-body" id="access-form">
-      <p class="admin-hint">Escolha o cargo e marque as abas que ele pode ver. Salve antes de trocar de cargo.</p>
+      <p class="admin-hint">Escolha o cargo e marque as divisões que ele pode ver. Salve antes de trocar de cargo.</p>
       <label for="access-role">Cargo</label>
       <select class="form-input" id="access-role" required></select>
       <div id="access-checks" class="access-checks"></div>
@@ -385,5 +409,5 @@
     seenIp: {{ seen_ip | tojson }}
   };
 </script>
-<script src="{{ url_for('static', filename='js/app.js') }}?v=9" defer></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=11" defer></script>
 {% endblock %}

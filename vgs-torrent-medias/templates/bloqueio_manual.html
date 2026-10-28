@@ -6,9 +6,42 @@
     <div class="access-denied-icon" aria-hidden="true">&#128274;</div>
     <h2>Acesso negado</h2>
     <p>
-      Você não possui acesso da Coordenação para utilização deste site.
-      Procure algum Administrador da plataforma caso ache que seja um erro.
+      Você não possui acesso da Administração de VGS-Torrent para utilização deste site.
+      Normalmente isto ocorre devido à expiração de assinatura, procure um Administrador via ticket no discord da VGS-Torrent encontrado em
+      <a href="https://ds-vanguards.vercel.app/" target="_blank" rel="noopener">DS-Vanguards</a>
+      para alteração de acesso ou renovação.
     </p>
+    <button class="copy-serial-btn" id="copy-serial" type="button" data-serial="{{ serial or '' }}">Copiar serial</button>
   </div>
 </div>
+<script>
+  (function () {
+    var button = document.getElementById("copy-serial");
+    if (!button) return;
+    button.addEventListener("click", function () {
+      var serial = button.getAttribute("data-serial") || "";
+      if (!serial) return;
+      var done = function () { button.textContent = "Serial copiado"; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(serial).then(done).catch(function () {
+          var area = document.createElement("textarea");
+          area.value = serial;
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand("copy");
+          area.remove();
+          done();
+        });
+        return;
+      }
+      var area = document.createElement("textarea");
+      area.value = serial;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+      done();
+    });
+  })();
+</script>
 {% endblock %}
